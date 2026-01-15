@@ -1,0 +1,13 @@
+{% extends "base_public.html" %}{% set title="Habilitation enregistrée" %}
+{% block content %}
+<p>Merci. L’habilitation a été enregistrée.</p>
+<ul>
+  <li><strong>Personne habilitée :</strong> {{ record.prenom }} {{ record.nom }}</li>
+  <li><strong>Formation :</strong> {{ record.formation.name }}</li>
+  <li><strong>Formateur :</strong> {{ record.trainer.first_name }} {{ record.trainer.last_name }}</li>
+  <li><strong>Date :</strong> {{ record.date_formation.strftime("%d/%m/%Y") }}</li>
+</ul>
+{% if record.attestation_pdf_path %}
+<p><a class="btn" href="{{ url_for('get_file', relpath=record.attestation_pdf_path) }}" target="_blank">Télécharger l’habilitation PDF</a></p>
+{% endif %}
+{% endblock %}

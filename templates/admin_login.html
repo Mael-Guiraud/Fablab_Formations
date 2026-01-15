@@ -1,0 +1,8 @@
+{% extends "base_admin.html" %}{% set title="Admin - Connexion" %}
+{% block content %}
+<form method="post" action="{{ url_for('admin_login_post') }}" class="card">
+  <label>Username<input name="username" required></label>
+  <label>Password<input name="password" type="password" required></label>
+  <button type="submit">Se connecter</button>
+</form>
+{% endblock %}

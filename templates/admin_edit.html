@@ -1,0 +1,19 @@
+{% extends "base_admin.html" %}{% set title="Modifier une habilitation" %}
+{% block content %}
+<form method="post" action="{{ url_for('admin_edit_post', record_id=record.id) }}" class="card">
+  <div class="grid">
+    <label>Nom*<input name="nom" required value="{{ record.nom }}"></label>
+    <label>Prénom*<input name="prenom" required value="{{ record.prenom }}"></label>
+    <label>Email*<input name="email" type="email" required value="{{ record.email }}"></label>
+    <label>Formateur*<select name="trainer_id" required>
+      {% for t in trainers %}<option value="{{ t.id }}" {% if record.trainer_id==t.id %}selected{% endif %}>{{ t.first_name }} {{ t.last_name }}</option>{% endfor %}
+    </select></label>
+    <label>Formation*<select name="formation_id" required>
+      {% for fo in formations %}<option value="{{ fo.id }}" {% if record.formation_id==fo.id %}selected{% endif %}>{{ fo.name }}</option>{% endfor %}
+    </select></label>
+    <label>Date<input name="date_formation" type="date" value="{{ record.date_formation.isoformat() }}"></label>
+  </div>
+  <button type="submit">Enregistrer</button>
+  <p class="hint">Les signatures ne sont pas modifiées ici. Le PDF est régénéré.</p>
+</form>
+{% endblock %}

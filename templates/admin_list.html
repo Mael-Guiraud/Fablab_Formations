@@ -1,0 +1,38 @@
+{% extends "base_admin.html" %}{% set title="Liste des formations" %}
+{% block content %}
+<form method="get" action="{{ url_for('admin_list') }}" class="toolbar">
+  <label>Filtrer par formation :
+    <select name="formation_id">
+      <option value="">(toutes)</option>
+      {% for fo in formations %}
+        <option value="{{ fo.id }}" {% if formation_filter|string == fo.id|string %}selected{% endif %}>{{ fo.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Appliquer</button>
+  <span class="spacer"></span>
+  <a class="btn" href="{{ url_for('admin_export_csv', formation_id=formation_filter) }}">Export CSV</a>
+</form>
+
+<table>
+  <thead><tr>
+    <th>ID</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Formation</th><th>Formateur</th><th>Date</th><th>PDF</th><th>Actions</th>
+  </tr></thead>
+  <tbody>
+    {% for r in records %}
+    <tr>
+      <td>{{ r.id }}</td><td>{{ r.nom }}</td><td>{{ r.prenom }}</td><td>{{ r.email }}</td>
+      <td>{{ r.formation.name }}</td><td>{{ r.trainer.first_name }} {{ r.trainer.last_name }}</td>
+      <td>{{ r.date_formation.strftime("%d/%m/%Y") }}</td>
+      <td>{% if r.attestation_pdf_path %}<a href="{{ url_for('get_file', relpath=r.attestation_pdf_path) }}" target="_blank">PDF</a>{% else %}—{% endif %}</td>
+      <td class="actions-col">
+        <a href="{{ url_for('admin_edit', record_id=r.id) }}">Modifier</a>
+        <form method="post" action="{{ url_for('admin_delete', record_id=r.id) }}" onsubmit="return confirm('Supprimer cet enregistrement ?');">
+          <button type="submit" class="danger">Supprimer</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

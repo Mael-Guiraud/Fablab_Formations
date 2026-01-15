@@ -1,0 +1,34 @@
+{% extends "base_admin.html" %}{% set title="Formations" %}
+{% block content %}
+<div class="card">
+  <h2>Créer une formation</h2>
+  <form method="post" action="{{ url_for('admin_formations_create') }}">
+    <label>Nom de la formation<input name="name" required></label>
+    <label>Texte "Formation"<textarea name="formation_text" rows="8"></textarea></label>
+    <label>Texte "Engagement"<textarea name="engagement_text" rows="8"></textarea></label>
+    <button type="submit">Créer</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Liste</h2>
+  <table><thead><tr><th>Nom</th><th>Formation</th><th>Engagement</th><th>Actif</th><th>Actions</th></tr></thead>
+  <tbody>
+    {% for fo in formations %}
+    <tr>
+      <td style="min-width:220px;"><form class="inline" method="post" action="{{ url_for('admin_formations_update', formation_id=fo.id) }}">
+        <input name="name" value="{{ fo.name }}" required></td>
+      <td style="min-width:340px;"><textarea name="formation_text" rows="8">{{ fo.formation_text }}</textarea></td>
+      <td style="min-width:340px;"><textarea name="engagement_text" rows="8">{{ fo.engagement_text }}</textarea></td>
+      <td><input type="checkbox" name="is_active" {% if fo.is_active %}checked{% endif %}></td>
+      <td class="actions-col">
+        <button type="submit">Mettre à jour</button></form>
+        <form method="post" action="{{ url_for('admin_formations_delete', formation_id=fo.id) }}" onsubmit="return confirm('Supprimer (ou désactiver si utilisé) ?');">
+          <button type="submit" class="danger">Supprimer</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}

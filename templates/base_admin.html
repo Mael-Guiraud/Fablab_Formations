@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title or "Admin" }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body><div class="container">
+<header class="header"><div><h1>{{ title or "Admin" }}</h1></div>
+{% if show_admin_nav %}
+<nav>
+  <a href="{{ url_for('admin_list') }}">Liste des formations</a>
+  <a href="{{ url_for('admin_password') }}">Mot de passe</a>
+  {% if admin and admin.role == "root" %}
+    <a href="{{ url_for('admin_admins') }}">Admins</a>
+    <a href="{{ url_for('admin_trainers') }}">Formateurs</a>
+    <a href="{{ url_for('admin_formations') }}">Formations</a>
+  {% endif %}
+  <a href="{{ url_for('admin_logout') }}">Logout</a>
+</nav>
+{% endif %}
+</header>
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}<div class="flash-area">{% for cat,msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}</div>{% endif %}
+{% endwith %}
+<main>{% block content %}{% endblock %}</main>
+<footer class="footer"><small>Application de suivi des habilitations</small></footer>
+</div></body></html>

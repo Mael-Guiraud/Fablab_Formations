@@ -1,0 +1,39 @@
+{% extends "base_admin.html" %}{% set title="Comptes admins" %}
+{% block content %}
+<div class="card">
+  <h2>Créer un compte admin</h2>
+  <form method="post" action="{{ url_for('admin_admins_create') }}">
+    <div class="grid">
+      <label>Username<input name="username" required></label>
+      <label>Mot de passe (min 8)<input name="password" type="password" required></label>
+      <label>Rôle<select name="role"><option value="admin">admin</option><option value="root">root</option></select></label>
+    </div>
+    <button type="submit">Créer</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Liste</h2>
+  <table><thead><tr><th>Username</th><th>Rôle</th><th>Actif</th><th>Nouveau MDP</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for u in admins %}
+    <tr>
+      <td>{{ u.username }}</td>
+      <td><form class="inline" method="post" action="{{ url_for('admin_admins_update', user_id=u.id) }}">
+        <select name="role" {% if u.username=="root" %}disabled{% endif %}>
+          <option value="admin" {% if u.role=="admin" %}selected{% endif %}>admin</option>
+          <option value="root" {% if u.role=="root" %}selected{% endif %}>root</option>
+        </select></td>
+      <td><input type="checkbox" name="is_active" {% if u.is_active %}checked{% endif %} {% if u.username=="root" %}disabled{% endif %}></td>
+      <td><input name="new_password" type="password" placeholder="(laisser vide)"></td>
+      <td class="actions-col">
+        <button type="submit">Mettre à jour</button></form>
+        <form method="post" action="{{ url_for('admin_admins_delete', user_id=u.id) }}" onsubmit="return confirm('Supprimer ce compte ?');">
+          <button type="submit" class="danger" {% if u.username=="root" %}disabled{% endif %}>Supprimer</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody></table>
+</div>
+{% endblock %}
