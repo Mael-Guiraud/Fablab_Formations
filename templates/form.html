@@ -1,5 +1,10 @@
 {% extends "base_public.html" %}{% set title="Formulaire d'habilitation" %}
 {% block content %}
+
+<script>
+  const FORMATION_TEXTS = {{ formations|tojson }};
+</script>
+
 {% if trainers|length == 0 or formations|length == 0 %}
 <div class="card">
   <p><strong>Configuration requise.</strong></p>
@@ -8,42 +13,90 @@
 </div>
 {% else %}
 <form method="post" action="{{ url_for('submit') }}" id="mainForm">
-  <div class="grid">
-    <label>Nom*<input name="nom" required></label>
-    <label>Prénom*<input name="prenom" required></label>
-    <label>Email*<input name="email" type="email" required></label>
-    <label>Formateur*<select name="trainer_id" required>
-      {% for t in trainers %}<option value="{{ t.id }}">{{ t.first_name }} {{ t.last_name }}</option>{% endfor %}
-    </select></label>
-    <label>Formation suivie*<select name="formation_id" required>
-      {% for fo in formations %}<option value="{{ fo.id }}">{{ fo.name }}</option>{% endfor %}
-    </select></label>
-    <label>Date (facultatif)<input name="date_formation" type="date" value=""><small>Si vide, la date du jour sera enregistrée.</small></label>
-  </div>
+  
+<div class="grid">
+  <label>Formation suivie* 
+    <select name="formation_id" id="formationSelect" required>
+      {% for fo in formations %}
+      <option value="{{ fo.id }}">{{ fo.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>Intervenant* 
+    <select name="trainer_id" required>
+      {% for t in trainers %}
+      <option value="{{ t.id }}">{{ t.first_name }} {{ t.last_name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>Date
+    <input name="date_formation" type="date" value="{{ today_str }}">
+    <small>Par défaut : date du jour.</small>
+  </label>
+
+  <label>Nom*<input name="nom" required></label>
+  <label>Prénom*<input name="prenom" required></label>
+
+  <label>Email CESI* 
+    <input name="email" type="email" required placeholder="prenom.nom@cesi.fr ou prenom.nom@viacesi.fr">
+    <small>Obligatoire en <strong>@cesi.fr</strong> ou <strong>@viacesi.fr</strong>.</small>
+  </label>
+</div>
+
   <hr>
-  <h2>Signatures</h2>
-  <div class="sig-grid">
-    <div class="sig-box">
-      <h3>Signature de la personne habilitée*</h3>
-      <canvas class="signature" id="sigForme" width="420" height="160"></canvas>
-      <div class="sig-actions"><button type="button" data-clear="sigForme">Effacer</button></div>
-      <input type="hidden" name="signature_forme" id="sigFormeData">
+  
+<hr>
+<h2>Récapitulatif (lecture)</h2>
+<div class="card" id="formationPreview">
+  <h3>Formation</h3>
+  <pre id="formationText" class="preview"></pre>
+  <h3>Engagement utilisateur</h3>
+  <pre id="engagementText" class="preview"></pre>
+  <p class="hint">Ces textes sont affichés à titre indicatif avant signature.</p>
+</div>
+
+<h2>Signatures</h2>
+
+<div class="sig-block">
+  <div class="sig-card">
+    <h3>Signature de la personne habilitée</h3>
+    <canvas id="sigFormeCanvas" class="sig-canvas"></canvas>
+    <div class="sig-actions">
+      <button class="btn secondary" id="clearSigForme" type="button">Effacer</button>
     </div>
-    <div class="sig-box">
-      <h3>Signature du formateur*</h3>
-      <canvas class="signature" id="sigFormateur" width="420" height="160"></canvas>
-      <div class="sig-actions"><button type="button" data-clear="sigFormateur">Effacer</button></div>
-      <input type="hidden" name="signature_formateur" id="sigFormateurData">
-    </div>
+    <input type="hidden" name="signature_forme" id="signature_forme">
   </div>
-  <div class="actions"><button type="submit">Valider</button></div>
+</div>
+
+<label style="display:block;margin-top:12px;">Code intervenant* 
+  <input name="access_code" required minlength="4" placeholder="Code fourni par l'intervenant">
+  <small>Le code est obligatoire pour valider l'habilitation.</small>
+</label>
+
+<button type="submit">Valider</button></div>
 </form>
-<script src="{{ url_for('static', filename='signature.js') }}"></script>
+{% endif %}
+
 <script>
-document.getElementById("mainForm").addEventListener("submit", function () {
-  document.getElementById("sigFormeData").value = window.SignaturePad.getDataURL("sigForme");
-  document.getElementById("sigFormateurData").value = window.SignaturePad.getDataURL("sigFormateur");
+function updatePreview(){
+  const sel = document.getElementById("formationSelect");
+  if(!sel) return;
+  const id = parseInt(sel.value, 10);
+  const f = (FORMATION_TEXTS || []).find(x => x.id === id);
+  const ft = (f && f.formation_text) ? f.formation_text : "";
+  const et = (f && f.engagement_text) ? f.engagement_text : "";
+  const fNode = document.getElementById("formationText");
+  const eNode = document.getElementById("engagementText");
+  if(fNode) fNode.textContent = ft;
+  if(eNode) eNode.textContent = et;
+}
+document.addEventListener("DOMContentLoaded", () => {
+  const sel = document.getElementById("formationSelect");
+  if(sel){ sel.addEventListener("change", updatePreview); }
+  updatePreview();
 });
 </script>
-{% endif %}
+
 {% endblock %}
