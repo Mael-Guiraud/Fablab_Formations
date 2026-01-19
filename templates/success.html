@@ -10,4 +10,8 @@
 {% if record.attestation_pdf_path %}
 <p><a class="btn" href="{{ url_for('get_file', relpath=record.attestation_pdf_path) }}" target="_blank">Télécharger l’habilitation PDF</a></p>
 {% endif %}
+<div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+  <a class="btn primary" href="{{ url_for('form') }}">Nouvel enregistrement</a>
+</div>
+
 {% endblock %}

@@ -1,74 +1,113 @@
+# app.py
 from __future__ import annotations
 
-import base64
-import csv
-import io
 import os
-from datetime import date, datetime, timezone
+import io
+import csv
+import base64
+from datetime import datetime, timezone, date
 from functools import wraps
 
 from flask import (
     Flask,
-    abort,
-    flash,
-    redirect,
     render_template,
     request,
-    send_file,
-    send_from_directory,
-    session,
+    redirect,
     url_for,
+    flash,
+    send_file,
+    session,
+    abort,
 )
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfgen import canvas
 from werkzeug.utils import secure_filename
 
-from models import AdminUser, Formation, FormationRecord, Trainer, db
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+from reportlab.lib import colors
+from reportlab.lib.utils import ImageReader
+
+from models import db, AdminUser, Trainer, Formation, FormationRecord
 
 
+# -------------------------
+# Helpers (time, filenames)
+# -------------------------
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def safe_filename(s: str) -> str:
+    import re
+    import unicodedata
+
+    s = (s or "").strip()
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+    s = re.sub(r"[^a-zA-Z0-9._-]+", "_", s)
+    return s.strip("_")
+
+
+def image_reader_from_dataurl(data_url: str) -> ImageReader:
+    if not data_url or not data_url.startswith("data:image/png;base64,"):
+        raise ValueError("Signature invalide (format attendu: PNG base64).")
+    raw = base64.b64decode(data_url.split(",", 1)[1])
+    return ImageReader(io.BytesIO(raw))
+
+
+def parse_date_or_today(s: str) -> date:
+    if not s:
+        return date.today()
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        return date.today()
+
+
+# -------------------------
+# App factory
+# -------------------------
 def create_app() -> Flask:
     app = Flask(__name__, instance_relative_config=True)
+
+    # À changer en prod
     app.secret_key = "CHANGE_ME_SECRET_KEY"
 
-    # Admin non public (URL connue des admins)
+    # Admin non public (URL connue)
     app.config["ADMIN_PATH"] = "/panel-nrfablab"
+
+    # PDF settings
     app.config["DEFAULT_CITY"] = "Nanterre"
-    app.config["TITLE_BLUE"] = "#1F4FFF"
+    app.config["TITLE_BLUE"] = "#365F91"
 
     # DB
     os.makedirs(app.instance_path, exist_ok=True)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(app.instance_path, "app.db")
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    db.init_app(app)
 
-    # Uploads (on ne zippe pas ces dossiers, mais l'app les crée)
+    # Uploads
     app.config["UPLOAD_ROOT"] = os.path.join(app.root_path, "uploads")
     app.config["SIGNATURE_DIR"] = os.path.join(app.config["UPLOAD_ROOT"], "signatures")
-    app.config["TRAINER_SIG_DIR"] = os.path.join(app.config["SIGNATURE_DIR"], "trainers")
     app.config["ATTESTATION_DIR"] = os.path.join(app.config["UPLOAD_ROOT"], "attestations")
-    for d in (app.config["SIGNATURE_DIR"], app.config["TRAINER_SIG_DIR"], app.config["ATTESTATION_DIR"]):
-        os.makedirs(d, exist_ok=True)
 
+    os.makedirs(app.config["SIGNATURE_DIR"], exist_ok=True)
+    os.makedirs(app.config["ATTESTATION_DIR"], exist_ok=True)
+
+    db.init_app(app)
     with app.app_context():
         db.create_all()
         seed_defaults()
 
-    # -----------------
-    # Helpers
-    # -----------------
+    admin_base = app.config["ADMIN_PATH"]
+
+    # -------------------------
+    # Auth helpers
+    # -------------------------
     def current_admin() -> AdminUser | None:
         uid = session.get("admin_user_id")
         return AdminUser.query.get(uid) if uid else None
 
     def login_required(role: str | None = None):
-        def decorator(fn):
+        def dec(fn):
             @wraps(fn)
             def wrapper(*args, **kwargs):
                 u = current_admin()
@@ -81,44 +120,19 @@ def create_app() -> Flask:
 
             return wrapper
 
-        return decorator
+        return dec
 
-    def parse_date_or_today(s: str) -> date:
-        if not s:
-            return date.today()
-        try:
-            return datetime.strptime(s, "%Y-%m-%d").date()
-        except ValueError:
-            return date.today()
-
-    def safe_filename(s: str) -> str:
-        import re
-        import unicodedata
-
-        s = (s or "").strip()
-        s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
-        s = re.sub(r"[^a-zA-Z0-9._-]+", "_", s)
-        return s.strip("_")
-
+    # -------------------------
+    # File helper
+    # -------------------------
     def abs_from_rel(rel_path: str) -> str:
-        return os.path.join(app.root_path, rel_path.replace("\\", "/"))
+        # rel_path expected like "uploads/xxx/yyy.png"
+        rel_path = (rel_path or "").replace("\\", "/")
+        return os.path.join(app.root_path, rel_path)
 
-    def image_reader_from_dataurl(data_url: str) -> ImageReader:
-        if not data_url or not data_url.startswith("data:image/png;base64,"):
-            raise ValueError("Signature invalide.")
-        raw = base64.b64decode(data_url.split(",", 1)[1])
-        return ImageReader(io.BytesIO(raw))
-
-    def save_trainer_signature_dataurl(data_url: str, trainer_name: str) -> str:
-        if not data_url or not data_url.startswith("data:image/png;base64,"):
-            raise ValueError("Signature intervenant invalide.")
-        raw = base64.b64decode(data_url.split(",", 1)[1])
-        fname = f"trainer_{safe_filename(trainer_name)}_{int(utcnow().timestamp())}.png"
-        abs_path = os.path.join(app.config["TRAINER_SIG_DIR"], fname)
-        with open(abs_path, "wb") as f:
-            f.write(raw)
-        return f"uploads/signatures/trainers/{fname}"
-
+    # -------------------------
+    # PDF helpers
+    # -------------------------
     def wrap_text(c: canvas.Canvas, text: str, font: str, size: int, maxw: float) -> list[str]:
         c.setFont(font, size)
         out: list[str] = []
@@ -156,6 +170,7 @@ def create_app() -> Flask:
         c.setFont("Helvetica", 11)
 
         for line in lines:
+            # simple page break safety
             if y < 105 * mm:
                 c.showPage()
                 y = A4[1] - 25 * mm
@@ -163,23 +178,19 @@ def create_app() -> Flask:
                 c.setFont("Helvetica", 11)
             c.drawString(20 * mm, y, line)
             y -= 6 * mm
+
         y -= 4 * mm
         return y
 
-    def generate_attestation_pdf(record: FormationRecord, sig_forme_img) -> str:
-        """
-        Génère le PDF en gardant exactement le style/mise en page que tu avais,
-        avec :
-        - signature habilité : en mémoire (sig_forme_img = ImageReader)
-        - signature intervenant : record.trainer.signature_path (fichier PNG stocké côté formateur)
-        - nommage + sous-dossiers : prenom_nom__email_at_xxx__formation_date.pdf dans
-            uploads/attestations/<cesi|viacesi>/<formation>/
-        """
-        # --- Nom de fichier demandé
+    def generate_attestation_pdf(record: FormationRecord, sig_forme_img: ImageReader) -> str:
+        # Filename required: prenom_nom__email_at_viacesi.fr__formation_date.pdf
         formation_part = safe_filename(record.formation.name)
         email_part = safe_filename(record.email.replace("@", "_at_"))
         date_part = record.date_formation.isoformat()
-        pdf_name = f"{safe_filename(record.prenom)}_{safe_filename(record.nom)}__{email_part}__{formation_part}_{date_part}.pdf"
+        pdf_name = (
+            f"{safe_filename(record.prenom)}_{safe_filename(record.nom)}"
+            f"__{email_part}__{formation_part}_{date_part}.pdf"
+        )
 
         domain_folder = "viacesi" if record.email.lower().endswith("@viacesi.fr") else "cesi"
         formation_folder = safe_filename(record.formation.name)
@@ -188,12 +199,11 @@ def create_app() -> Flask:
         os.makedirs(target_dir, exist_ok=True)
         abs_pdf = os.path.join(target_dir, pdf_name)
 
-        # --- PDF
         buf = io.BytesIO()
         c = canvas.Canvas(buf, pagesize=A4)
         width, height = A4
 
-        # Logo (mêmes dimensions/position que ton exemple)
+        # Logo (dimensions/position exactes comme ton exemple)
         logo_path = os.path.join(app.root_path, "static", "cesi_logo.png")
         if os.path.exists(logo_path):
             c.drawImage(
@@ -206,46 +216,42 @@ def create_app() -> Flask:
                 mask="auto",
             )
 
-        # Titres centrés, couleur + taille comme ton exemple
+        # Titre centré
         c.setFillColor(colors.HexColor("#365F91"))
         c.setFont("Helvetica", 24)
-
         y = height - 30 * mm
         c.drawCentredString(A4[0] / 2, y, "Habilitation :")
         y -= 10 * mm
         c.drawCentredString(A4[0] / 2, y, record.formation.name)
 
-        # Corps en noir
         c.setFillColor(colors.black)
 
         y -= 30 * mm
         y = draw_section(c, y, "Formation :", record.formation.formation_text)
         y = draw_section(c, y, "Engagement :", record.formation.engagement_text)
 
-        # Table (mêmes valeurs que ton exemple)
+        # Table (comme ton exemple)
         table_top = 100 * mm
-        left_x = 40 * mm
+        left_x_header = 40 * mm
         col_w = (A4[0] - 40 * mm) / 2
         col_w2 = (A4[0] - 40 * mm) / 4
 
         c.setFont("Helvetica", 11)
-        c.drawString(left_x, table_top, "Personne habilitée")
-        c.drawString(left_x + col_w, table_top, "Formateur")
+        c.drawString(left_x_header, table_top, "Personne habilitée")
+        c.drawString(left_x_header + col_w, table_top, "Formateur")
 
         y0 = table_top - 10 * mm
         left_x = 20 * mm
+
         c.setFont("Helvetica", 11)
         c.drawString(left_x, y0, "Nom")
         c.drawString(left_x + col_w, y0, "Nom")
-
         c.drawString(left_x + col_w2, y0, record.nom)
         c.drawString(left_x + col_w + col_w2, y0, record.trainer.last_name)
 
         y2 = y0 - 7 * mm
         c.drawString(left_x, y2, "Prénom")
         c.drawString(left_x + col_w, y2, "Prénom")
-
-        # (dans ton code tu dessinais au même y2, on garde le même rendu)
         c.drawString(left_x + col_w2, y2, record.prenom)
         c.drawString(left_x + col_w + col_w2, y2, record.trainer.first_name)
 
@@ -253,15 +259,13 @@ def create_app() -> Flask:
         c.drawString(left_x, y4, "Signature")
         c.drawString(left_x + col_w, y4, "Signature")
 
-        # Encadrés signatures
         box_y = 35 * mm
         box_h = 28 * mm
         box_w = col_w - 10 * mm
-
         c.rect(left_x, box_y, box_w, box_h, stroke=1, fill=0)
         c.rect(left_x + col_w, box_y, box_w, box_h, stroke=1, fill=0)
 
-        # Signature habilité (en mémoire, pas stockée)
+        # Signature habilité (en mémoire, non stockée)
         try:
             c.drawImage(
                 sig_forme_img,
@@ -275,7 +279,7 @@ def create_app() -> Flask:
         except Exception:
             pass
 
-        # Signature formateur (stockée sur le formateur)
+        # Signature formateur (stockée sur Trainer.signature_path)
         try:
             if record.trainer.signature_path:
                 c.drawImage(
@@ -290,7 +294,7 @@ def create_app() -> Flask:
         except Exception:
             pass
 
-        # Pied de page (identique à ton exemple)
+        # Pied
         c.setFont("Helvetica", 11)
         c.drawString(20 * mm, 18 * mm, f"Date :  {record.date_formation.strftime('%d/%m/%Y')}")
         c.drawString(90 * mm, 18 * mm, f"Fait à :  {app.config['DEFAULT_CITY']}")
@@ -311,7 +315,6 @@ def create_app() -> Flask:
 
         return f"uploads/attestations/{domain_folder}/{formation_folder}/{pdf_name}"
 
-
     def records_query(formation_id: str | None):
         q = FormationRecord.query.order_by(FormationRecord.created_at.desc())
         if formation_id:
@@ -321,22 +324,9 @@ def create_app() -> Flask:
                 pass
         return q
 
-    # -----------------
-    # Static access helper
-    # -----------------
-    @app.get("/file/<path:relpath>")
-    def get_file(relpath: str):
-        relpath = relpath.replace("\\", "/")
-        if not relpath.startswith("uploads/"):
-            abort(404)
-        abs_path = os.path.join(app.root_path, relpath)
-        if not os.path.isfile(abs_path):
-            abort(404)
-        return send_file(abs_path)
-
-    # -----------------
-    # Public
-    # -----------------
+    # -------------------------
+    # PUBLIC
+    # -------------------------
     @app.get("/")
     def form():
         trainers = (
@@ -344,24 +334,27 @@ def create_app() -> Flask:
             .order_by(Trainer.last_name.asc(), Trainer.first_name.asc())
             .all()
         )
-        formations = Formation.query.filter_by(is_active=True).order_by(Formation.name.asc()).all()
-        today_str = date.today().isoformat()
-        formations_json = [
+        formations_db = Formation.query.filter_by(is_active=True).order_by(Formation.name.asc()).all()
+
+        # On passe des dicts pour un tojson fiable côté template
+        formations = [
             {
                 "id": fo.id,
                 "name": fo.name,
                 "formation_text": fo.formation_text,
                 "engagement_text": fo.engagement_text,
             }
-            for fo in formations
+            for fo in formations_db
         ]
-        return render_template("form.html", trainers=trainers, formations=formations_json, today_str=today_str)
+
+        today_str = date.today().isoformat()
+        return render_template("form.html", trainers=trainers, formations=formations, today_str=today_str)
 
     @app.post("/submit")
     def submit():
         nom = (request.form.get("nom") or "").strip()
         prenom = (request.form.get("prenom") or "").strip()
-        email = (request.form.get("email") or "").strip()
+        email_ = (request.form.get("email") or "").strip()
         trainer_id = (request.form.get("trainer_id") or "").strip()
         formation_id = (request.form.get("formation_id") or "").strip()
         date_str = (request.form.get("date_formation") or "").strip()
@@ -380,16 +373,16 @@ def create_app() -> Flask:
             errors.append("Nom obligatoire.")
         if not prenom:
             errors.append("Prénom obligatoire.")
-        if not email:
+
+        if not email_:
             errors.append("Email obligatoire.")
         else:
-            eml = email.lower()
+            eml = email_.lower()
             if not (eml.endswith("@cesi.fr") or eml.endswith("@viacesi.fr")):
                 errors.append("Email obligatoire en @cesi.fr ou @viacesi.fr.")
 
         if len(sig_forme) < 50:
             errors.append("Signature de la personne habilitée obligatoire.")
-
         if not access_code:
             errors.append("Code intervenant obligatoire.")
 
@@ -400,7 +393,7 @@ def create_app() -> Flask:
             errors.append("Intervenant invalide.")
         else:
             if not trainer.signature_path:
-                errors.append("Signature intervenant manquante (à configurer côté admin).")
+                errors.append("Signature de l'intervenant manquante (à enregistrer côté admin).")
             if not trainer.access_code_hash:
                 errors.append("Code intervenant non configuré pour ce formateur.")
             elif not trainer.check_access_code(access_code):
@@ -414,24 +407,29 @@ def create_app() -> Flask:
                 flash(e, "error")
             return redirect(url_for("form"))
 
-        d = parse_date_or_today(date_str)
-
         try:
             sig_forme_img = image_reader_from_dataurl(sig_forme)
         except Exception as ex:
-            flash(f"Signature invalide: {ex}", "error")
+            flash(f"Erreur signature: {ex}", "error")
             return redirect(url_for("form"))
+
+        d = parse_date_or_today(date_str)
 
         record = FormationRecord(
             nom=nom,
             prenom=prenom,
-            email=email,
+            email=email_,
             trainer_id=trainer.id,
             formation_id=formation.id,
             date_formation=d,
-            signature_forme_path="",  # non utilisé
-            signature_formateur_path="",  # non utilisé
         )
+
+        # On ne stocke pas les signatures habilité/formateur au niveau record
+        if hasattr(record, "signature_forme_path"):
+            record.signature_forme_path = ""
+        if hasattr(record, "signature_formateur_path"):
+            record.signature_formateur_path = ""
+
         db.session.add(record)
         db.session.commit()
 
@@ -441,11 +439,19 @@ def create_app() -> Flask:
 
         return render_template("success.html", record=record)
 
-    # -----------------
-    # Admin
-    # -----------------
-    admin_base = app.config["ADMIN_PATH"]
+    @app.get("/file/<path:relpath>")
+    def get_file(relpath: str):
+        relpath = (relpath or "").replace("\\", "/")
+        if not relpath.startswith("uploads/"):
+            abort(404)
+        abs_path = os.path.join(app.root_path, relpath)
+        if not os.path.isfile(abs_path):
+            abort(404)
+        return send_file(abs_path)
 
+    # -------------------------
+    # ADMIN - Auth
+    # -------------------------
     @app.get(admin_base + "/login")
     def admin_login():
         return render_template("admin_login.html", show_admin_nav=False)
@@ -454,10 +460,12 @@ def create_app() -> Flask:
     def admin_login_post():
         username = (request.form.get("username") or "").strip()
         password = (request.form.get("password") or "").strip()
+
         u = AdminUser.query.filter_by(username=username).first()
         if u and u.is_active and u.check_password(password):
             session["admin_user_id"] = u.id
             return redirect(url_for("admin_list"))
+
         flash("Identifiants invalides.", "error")
         return redirect(url_for("admin_login"))
 
@@ -465,6 +473,30 @@ def create_app() -> Flask:
     def admin_logout():
         session.clear()
         return redirect(url_for("admin_login"))
+
+    # -------------------------
+    # ADMIN - Main list
+    # -------------------------
+    @app.get(admin_base + "/")
+    @login_required()
+    def admin_list():
+        formation_id = request.args.get("formation_id") or ""
+        records = records_query(formation_id).all()
+
+        formations = Formation.query.filter_by(is_active=True).order_by(Formation.name.asc()).all()
+
+        return render_template(
+            "admin_list.html",
+            records=records,
+            formations=formations,
+            formation_filter=formation_id,
+            admin=current_admin(),
+            show_admin_nav=True,
+        )
+
+    # -------------------------
+    # ADMIN - Password
+    # -------------------------
     @app.get(admin_base + "/password")
     @login_required()
     def admin_password():
@@ -498,21 +530,33 @@ def create_app() -> Flask:
         flash("Mot de passe mis à jour.", "ok")
         return redirect(url_for("admin_list"))
 
-    @app.get(admin_base + "/")
+    # -------------------------
+    # ADMIN - Delete record
+    # -------------------------
+    @app.post(admin_base + "/delete/<int:record_id>")
     @login_required()
-    def admin_list():
-        formation_id = request.args.get("formation_id") or ""
-        records = records_query(formation_id).all()
-        formations = Formation.query.filter_by(is_active=True).order_by(Formation.name.asc()).all()
-        return render_template(
-            "admin_list.html",
-            records=records,
-            formations=formations,
-            formation_filter=formation_id,
-            admin=current_admin(),
-            show_admin_nav=True,
-        )
+    def admin_delete(record_id: int):
+        record = FormationRecord.query.get_or_404(record_id)
 
+        # Supprimer le PDF si présent
+        rel = (record.attestation_pdf_path or "").replace("\\", "/")
+        if rel.startswith("uploads/"):
+            abs_p = os.path.join(app.root_path, rel)
+            try:
+                if os.path.isfile(abs_p):
+                    os.remove(abs_p)
+            except Exception:
+                pass
+
+        db.session.delete(record)
+        db.session.commit()
+
+        flash("Enregistrement supprimé.", "ok")
+        return redirect(url_for("admin_list"))
+
+    # -------------------------
+    # ADMIN - Export CSV
+    # -------------------------
     @app.get(admin_base + "/export/csv")
     @login_required()
     def admin_export_csv():
@@ -527,8 +571,8 @@ def create_app() -> Flask:
                 "nom",
                 "prenom",
                 "email",
-                "intervenant_nom",
-                "intervenant_prenom",
+                "formateur_nom",
+                "formateur_prenom",
                 "formation",
                 "date_formation",
                 "created_at",
@@ -546,7 +590,7 @@ def create_app() -> Flask:
                     r.trainer.first_name,
                     r.formation.name,
                     r.date_formation.isoformat(),
-                    r.created_at.isoformat(),
+                    r.created_at.isoformat() if r.created_at else "",
                     r.attestation_pdf_path or "",
                 ]
             )
@@ -561,11 +605,35 @@ def create_app() -> Flask:
             download_name=f"habilitations_{suffix}.csv",
         )
 
+    # -------------------------
+    # ROOT - Trainers (signature + code)
+    # -------------------------
+    def save_trainer_signature_dataurl(data_url: str, trainer_name: str) -> str:
+        if not data_url or not data_url.startswith("data:image/png;base64,"):
+            raise ValueError("Signature formateur invalide.")
+        raw = base64.b64decode(data_url.split(",", 1)[1])
+
+        rel_dir = os.path.join("uploads", "signatures", "trainers")
+        abs_dir = os.path.join(app.root_path, rel_dir)
+        os.makedirs(abs_dir, exist_ok=True)
+
+        fname = f"trainer_{safe_filename(trainer_name)}_{int(utcnow().timestamp())}.png"
+        abs_path = os.path.join(abs_dir, fname)
+        with open(abs_path, "wb") as f:
+            f.write(raw)
+
+        return f"{rel_dir}/{fname}".replace("\\", "/")
+
     @app.get(admin_base + "/trainers")
     @login_required(role="root")
     def admin_trainers():
         trainers = Trainer.query.order_by(Trainer.last_name.asc(), Trainer.first_name.asc()).all()
-        return render_template("admin_trainers.html", trainers=trainers, admin=current_admin(), show_admin_nav=True)
+        return render_template(
+            "admin_trainers.html",
+            trainers=trainers,
+            admin=current_admin(),
+            show_admin_nav=True,
+        )
 
     @app.post(admin_base + "/trainers/create")
     @login_required(role="root")
@@ -584,16 +652,23 @@ def create_app() -> Flask:
         if not sig or len(sig) < 50:
             flash("Signature intervenant obligatoire.", "error")
             return redirect(url_for("admin_trainers"))
-        if Trainer.query.filter_by(last_name=ln, first_name=fn).first():
+
+        existing = Trainer.query.filter_by(last_name=ln, first_name=fn).first()
+        if existing:
             flash("Ce formateur existe déjà.", "error")
             return redirect(url_for("admin_trainers"))
 
         t = Trainer(last_name=ln, first_name=fn, is_active=True)
         t.set_access_code(code)
-        t.signature_path = save_trainer_signature_dataurl(sig, f"{fn}_{ln}")
+        try:
+            t.signature_path = save_trainer_signature_dataurl(sig, f"{fn}_{ln}")
+        except Exception as ex:
+            flash(f"Erreur signature formateur: {ex}", "error")
+            return redirect(url_for("admin_trainers"))
 
         db.session.add(t)
         db.session.commit()
+
         flash("Formateur créé.", "ok")
         return redirect(url_for("admin_trainers"))
 
@@ -616,7 +691,7 @@ def create_app() -> Flask:
             Trainer.last_name == ln, Trainer.first_name == fn, Trainer.id != t.id
         ).first()
         if other:
-            flash("Nom/prénom déjà utilisés.", "error")
+            flash("Nom/prénom déjà utilisés par un autre formateur.", "error")
             return redirect(url_for("admin_trainers"))
 
         if code:
@@ -629,22 +704,134 @@ def create_app() -> Flask:
             if not sig_file.filename.lower().endswith(".png"):
                 flash("La signature doit être un PNG.", "error")
                 return redirect(url_for("admin_trainers"))
+
+            rel_dir = os.path.join("uploads", "signatures", "trainers")
+            abs_dir = os.path.join(app.root_path, rel_dir)
+            os.makedirs(abs_dir, exist_ok=True)
+
             fname = f"trainer_{safe_filename(fn+'_'+ln)}_{int(utcnow().timestamp())}.png"
-            abs_path = os.path.join(app.config["TRAINER_SIG_DIR"], fname)
+            abs_path = os.path.join(abs_dir, fname)
             sig_file.save(abs_path)
-            t.signature_path = f"uploads/signatures/trainers/{fname}"
+            t.signature_path = f"{rel_dir}/{fname}".replace("\\", "/")
 
         t.last_name = ln
         t.first_name = fn
         t.is_active = is_active
         db.session.commit()
+
         flash("Formateur mis à jour.", "ok")
         return redirect(url_for("admin_trainers"))
+
+    @app.post(admin_base + "/trainers/delete/<int:trainer_id>")
+    @login_required(role="root")
+    def admin_trainers_delete(trainer_id: int):
+        t = Trainer.query.get_or_404(trainer_id)
+
+        used = FormationRecord.query.filter_by(trainer_id=t.id).first()
+        if used:
+            t.is_active = False
+            db.session.commit()
+            flash("Formateur désactivé (utilisé dans des enregistrements).", "ok")
+            return redirect(url_for("admin_trainers"))
+
+        db.session.delete(t)
+        db.session.commit()
+        flash("Formateur supprimé.", "ok")
+        return redirect(url_for("admin_trainers"))
+
+    # -------------------------
+    # ROOT - Formations
+    # -------------------------
+    @app.get(admin_base + "/formations")
+    @login_required(role="root")
+    def admin_formations():
+        formations = Formation.query.order_by(Formation.name.asc()).all()
+        return render_template(
+            "admin_formations.html",
+            formations=formations,
+            admin=current_admin(),
+            show_admin_nav=True,
+        )
+
+    @app.post(admin_base + "/formations/create")
+    @login_required(role="root")
+    def admin_formations_create():
+        name = (request.form.get("name") or "").strip()
+        ft = (request.form.get("formation_text") or "").strip()
+        et = (request.form.get("engagement_text") or "").strip()
+
+        if not name:
+            flash("Nom de la formation obligatoire.", "error")
+            return redirect(url_for("admin_formations"))
+        if Formation.query.filter_by(name=name).first():
+            flash("Cette formation existe déjà.", "error")
+            return redirect(url_for("admin_formations"))
+
+        f = Formation(name=name, formation_text=ft, engagement_text=et, is_active=True)
+        db.session.add(f)
+        db.session.commit()
+
+        flash("Formation créée.", "ok")
+        return redirect(url_for("admin_formations"))
+
+    @app.post(admin_base + "/formations/update/<int:formation_id>")
+    @login_required(role="root")
+    def admin_formations_update(formation_id: int):
+        f = Formation.query.get_or_404(formation_id)
+
+        name = (request.form.get("name") or "").strip()
+        ft = (request.form.get("formation_text") or "").strip()
+        et = (request.form.get("engagement_text") or "").strip()
+        is_active = (request.form.get("is_active") or "off") == "on"
+
+        if not name:
+            flash("Nom obligatoire.", "error")
+            return redirect(url_for("admin_formations"))
+
+        other = Formation.query.filter(Formation.name == name, Formation.id != f.id).first()
+        if other:
+            flash("Nom déjà utilisé par une autre formation.", "error")
+            return redirect(url_for("admin_formations"))
+
+        f.name = name
+        f.formation_text = ft
+        f.engagement_text = et
+        f.is_active = is_active
+        db.session.commit()
+
+        flash("Formation mise à jour.", "ok")
+        return redirect(url_for("admin_formations"))
+
+    @app.post(admin_base + "/formations/delete/<int:formation_id>")
+    @login_required(role="root")
+    def admin_formations_delete(formation_id: int):
+        f = Formation.query.get_or_404(formation_id)
+
+        used = FormationRecord.query.filter_by(formation_id=f.id).first()
+        if used:
+            f.is_active = False
+            db.session.commit()
+            flash("Formation désactivée (utilisée dans des enregistrements).", "ok")
+            return redirect(url_for("admin_formations"))
+
+        db.session.delete(f)
+        db.session.commit()
+        flash("Formation supprimée.", "ok")
+        return redirect(url_for("admin_formations"))
+
+    # -------------------------
+    # ROOT - Admin users
+    # -------------------------
     @app.get(admin_base + "/admins")
     @login_required(role="root")
     def admin_admins():
         admins = AdminUser.query.order_by(AdminUser.role.desc(), AdminUser.username.asc()).all()
-        return render_template("admin_admins.html", admins=admins, admin=current_admin(), show_admin_nav=True)
+        return render_template(
+            "admin_admins.html",
+            admins=admins,
+            admin=current_admin(),
+            show_admin_nav=True,
+        )
 
     @app.post(admin_base + "/admins/create")
     @login_required(role="root")
@@ -658,11 +845,9 @@ def create_app() -> Flask:
         if not username or not password:
             flash("Username et mot de passe obligatoires.", "error")
             return redirect(url_for("admin_admins"))
-
         if len(password) < 8:
             flash("Mot de passe min 8 caractères.", "error")
             return redirect(url_for("admin_admins"))
-
         if AdminUser.query.filter_by(username=username).first():
             flash("Username déjà utilisé.", "error")
             return redirect(url_for("admin_admins"))
@@ -719,100 +904,21 @@ def create_app() -> Flask:
         flash("Compte supprimé.", "ok")
         return redirect(url_for("admin_admins"))
 
-    @app.post(admin_base + "/trainers/delete/<int:trainer_id>")
-    @login_required(role="root")
-    def admin_trainers_delete(trainer_id: int):
-        t = Trainer.query.get_or_404(trainer_id)
-        used = FormationRecord.query.filter_by(trainer_id=t.id).first()
-        if used:
-            t.is_active = False
-            db.session.commit()
-            flash("Formateur désactivé (utilisé dans des enregistrements).", "ok")
-            return redirect(url_for("admin_trainers"))
-        db.session.delete(t)
-        db.session.commit()
-        flash("Formateur supprimé.", "ok")
-        return redirect(url_for("admin_trainers"))
-
-    @app.get(admin_base + "/formations")
-    @login_required(role="root")
-    def admin_formations():
-        formations = Formation.query.order_by(Formation.name.asc()).all()
-        return render_template("admin_formations.html", formations=formations, admin=current_admin(), show_admin_nav=True)
-
-    @app.post(admin_base + "/formations/create")
-    @login_required(role="root")
-    def admin_formations_create():
-        name = (request.form.get("name") or "").strip()
-        ft = (request.form.get("formation_text") or "").strip()
-        et = (request.form.get("engagement_text") or "").strip()
-
-        if not name:
-            flash("Nom de la formation obligatoire.", "error")
-            return redirect(url_for("admin_formations"))
-        if Formation.query.filter_by(name=name).first():
-            flash("Cette formation existe déjà.", "error")
-            return redirect(url_for("admin_formations"))
-
-        f = Formation(name=name, formation_text=ft, engagement_text=et, is_active=True)
-        db.session.add(f)
-        db.session.commit()
-        flash("Formation créée.", "ok")
-        return redirect(url_for("admin_formations"))
-
-    @app.post(admin_base + "/formations/update/<int:formation_id>")
-    @login_required(role="root")
-    def admin_formations_update(formation_id: int):
-        f = Formation.query.get_or_404(formation_id)
-
-        name = (request.form.get("name") or "").strip()
-        ft = (request.form.get("formation_text") or "").strip()
-        et = (request.form.get("engagement_text") or "").strip()
-        is_active = (request.form.get("is_active") or "off") == "on"
-
-        if not name:
-            flash("Nom obligatoire.", "error")
-            return redirect(url_for("admin_formations"))
-
-        other = Formation.query.filter(Formation.name == name, Formation.id != f.id).first()
-        if other:
-            flash("Nom déjà utilisé.", "error")
-            return redirect(url_for("admin_formations"))
-
-        f.name = name
-        f.formation_text = ft
-        f.engagement_text = et
-        f.is_active = is_active
-        db.session.commit()
-        flash("Formation mise à jour.", "ok")
-        return redirect(url_for("admin_formations"))
-
-    @app.post(admin_base + "/formations/delete/<int:formation_id>")
-    @login_required(role="root")
-    def admin_formations_delete(formation_id: int):
-        f = Formation.query.get_or_404(formation_id)
-        used = FormationRecord.query.filter_by(formation_id=f.id).first()
-        if used:
-            f.is_active = False
-            db.session.commit()
-            flash("Formation désactivée (utilisée).", "ok")
-            return redirect(url_for("admin_formations"))
-        db.session.delete(f)
-        db.session.commit()
-        flash("Formation supprimée.", "ok")
-        return redirect(url_for("admin_formations"))
-
     return app
 
 
+# -------------------------
+# Default seed
+# -------------------------
 def seed_defaults() -> None:
     if AdminUser.query.count() == 0:
         root = AdminUser(username="root", role="root", is_active=True)
-        root.set_password("root123")
+        root.set_password("root123")  # change after first login
         db.session.add(root)
-    db.session.commit()
+        db.session.commit()
 
 
 if __name__ == "__main__":
     app = create_app()
+    # LAN: host="0.0.0.0"
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -1,34 +1,135 @@
-{% extends "base_admin.html" %}{% set title="Formations" %}
+{% extends "base_admin.html" %}
+{% set title="Formations" %}
 {% block content %}
+
 <div class="card">
   <h2>Créer une formation</h2>
   <form method="post" action="{{ url_for('admin_formations_create') }}">
-    <label>Nom de la formation<input name="name" required></label>
-    <label>Texte "Formation"<textarea name="formation_text" rows="8"></textarea></label>
-    <label>Texte "Engagement"<textarea name="engagement_text" rows="8"></textarea></label>
+    <label>Nom de la formation
+      <input name="name" required>
+    </label>
+    <label>Texte "Formation"
+      <textarea name="formation_text" rows="8"></textarea>
+    </label>
+    <label>Texte "Engagement"
+      <textarea name="engagement_text" rows="8"></textarea>
+    </label>
     <button type="submit">Créer</button>
   </form>
 </div>
 
 <div class="card">
   <h2>Liste</h2>
-  <table><thead><tr><th>Nom</th><th>Formation</th><th>Engagement</th><th>Actif</th><th>Actions</th></tr></thead>
-  <tbody>
-    {% for fo in formations %}
-    <tr>
-      <td style="min-width:220px;"><form class="inline" method="post" action="{{ url_for('admin_formations_update', formation_id=fo.id) }}">
-        <input name="name" value="{{ fo.name }}" required></td>
-      <td style="min-width:340px;"><textarea name="formation_text" rows="8">{{ fo.formation_text }}</textarea></td>
-      <td style="min-width:340px;"><textarea name="engagement_text" rows="8">{{ fo.engagement_text }}</textarea></td>
-      <td><input type="checkbox" name="is_active" {% if fo.is_active %}checked{% endif %}></td>
-      <td class="actions-col">
-        <button type="submit">Mettre à jour</button></form>
-        <form method="post" action="{{ url_for('admin_formations_delete', formation_id=fo.id) }}" onsubmit="return confirm('Supprimer (ou désactiver si utilisé) ?');">
-          <button type="submit" class="danger">Supprimer</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody></table>
+
+  <table class="table formations-table">
+    <thead>
+      <tr>
+        <th>Nom</th>
+        <th style="width:110px;">Actif</th>
+        <th style="width:240px;">Actions</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for fo in formations %}
+      {# Form UPDATE : englobe les 3 lignes pour un seul submit #}
+      <form method="post" action="{{ url_for('admin_formations_update', formation_id=fo.id) }}">
+        <!-- Ligne 1 : Nom + Actif + Actions -->
+        <tr class="row-main">
+          <td>
+            <input name="name" value="{{ fo.name }}" required style="width:100%;">
+          </td>
+
+          <td style="text-align:center;">
+            <label class="switch">
+              <input type="checkbox" name="is_active" {% if fo.is_active %}checked{% endif %}>
+              <span class="switch-label">{{ "Oui" if fo.is_active else "Non" }}</span>
+            </label>
+          </td>
+
+          <td class="actions-col">
+            <button type="submit">Mettre à jour</button>
+
+            {# Form DELETE séparé #}
+            <form method="post"
+                  action="{{ url_for('admin_formations_delete', formation_id=fo.id) }}"
+                  onsubmit="return confirm('Supprimer (ou désactiver si utilisé) ?');"
+                  style="display:inline;">
+              <button type="submit" class="danger">Supprimer</button>
+            </form>
+          </td>
+        </tr>
+
+        <!-- Ligne 2 : Texte Formation pleine largeur -->
+        <tr class="row-text">
+          <td colspan="3">
+            <div class="text-block">
+              <div class="text-title">Texte “Formation”</div>
+              <textarea name="formation_text" rows="8">{{ fo.formation_text }}</textarea>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Ligne 3 : Texte Engagement pleine largeur -->
+        <tr class="row-text">
+          <td colspan="3">
+            <div class="text-block">
+              <div class="text-title">Texte “Engagement”</div>
+              <textarea name="engagement_text" rows="8">{{ fo.engagement_text }}</textarea>
+            </div>
+          </td>
+        </tr>
+      </form>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
+
+<style>
+/* Optionnel : si ton base_admin.html a déjà une .table, garde juste les classes formations-table/row-* */
+
+.formations-table .row-main td{
+  vertical-align: middle;
+}
+
+.formations-table .row-text td{
+  background: #fafafa;
+}
+
+.text-block{
+  padding: 8px 2px;
+}
+
+.text-title{
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.formations-table textarea{
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.switch{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switch-label{
+  font-size: 0.9em;
+  color: #444;
+}
+
+.actions-col{
+  white-space: nowrap;
+}
+
+/* petit confort : espacements boutons si besoin */
+.actions-col button{
+  margin-right: 6px;
+}
+</style>
+
 {% endblock %}
