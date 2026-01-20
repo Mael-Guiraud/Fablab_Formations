@@ -8,7 +8,7 @@
   <li><strong>Date :</strong> {{ record.date_formation.strftime("%d/%m/%Y") }}</li>
 </ul>
 {% if record.attestation_pdf_path %}
-<p><a class="btn" href="{{ url_for('get_file', relpath=record.attestation_pdf_path) }}" target="_blank">Télécharger l’habilitation PDF</a></p>
+<p><a class="btn" href="{{ uurl_for('get_attestation', filename=record.attestation_pdf_path) }}" target="_blank">Télécharger l’habilitation PDF</a></p>
 {% endif %}
 <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
   <a class="btn primary" href="{{ url_for('form') }}">Nouvel enregistrement</a>

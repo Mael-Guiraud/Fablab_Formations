@@ -7,7 +7,7 @@ import csv
 import base64
 from datetime import datetime, timezone, date
 from functools import wraps
-
+from werkzeug.security import safe_join
 from flask import (
     Flask,
     render_template,
@@ -87,7 +87,7 @@ def create_app() -> Flask:
     # Uploads
     app.config["UPLOAD_ROOT"] = os.path.join(app.root_path, "uploads")
     app.config["SIGNATURE_DIR"] = os.path.join(app.config["UPLOAD_ROOT"], "signatures")
-    app.config["ATTESTATION_DIR"] = os.path.join(app.config["UPLOAD_ROOT"], "attestations")
+    app.config["ATTESTATION_DIR"] = r"C:\Users\FabLabFormations\OneDrive - Cesi\Habilitations"
 
     os.makedirs(app.config["SIGNATURE_DIR"], exist_ok=True)
     os.makedirs(app.config["ATTESTATION_DIR"], exist_ok=True)
@@ -192,12 +192,11 @@ def create_app() -> Flask:
             f"__{email_part}__{formation_part}_{date_part}.pdf"
         )
 
-        domain_folder = "viacesi" if record.email.lower().endswith("@viacesi.fr") else "cesi"
-        formation_folder = safe_filename(record.formation.name)
-
-        target_dir = os.path.join(app.config["ATTESTATION_DIR"], domain_folder, formation_folder)
+        target_dir = app.config["ATTESTATION_DIR"]
         os.makedirs(target_dir, exist_ok=True)
+
         abs_pdf = os.path.join(target_dir, pdf_name)
+
 
         buf = io.BytesIO()
         c = canvas.Canvas(buf, pagesize=A4)
@@ -313,7 +312,7 @@ def create_app() -> Flask:
         with open(abs_pdf, "wb") as f:
             f.write(buf.read())
 
-        return f"uploads/attestations/{domain_folder}/{formation_folder}/{pdf_name}"
+        return pdf_name
 
     def records_query(formation_id: str | None):
         q = FormationRecord.query.order_by(FormationRecord.created_at.desc())
@@ -448,7 +447,13 @@ def create_app() -> Flask:
         if not os.path.isfile(abs_path):
             abort(404)
         return send_file(abs_path)
-
+    @app.get("/attestation/<path:filename>")
+    def get_attestation(filename: str):
+        # Empêche la traversée de chemin (..)
+        abs_path = safe_join(app.config["ATTESTATION_DIR"], filename)
+        if not abs_path or not os.path.isfile(abs_path):
+            abort(404)
+        return send_file(abs_path)
     # -------------------------
     # ADMIN - Auth
     # -------------------------

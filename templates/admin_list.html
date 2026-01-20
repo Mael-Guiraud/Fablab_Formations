@@ -24,7 +24,7 @@
       <td>{{ r.id }}</td><td>{{ r.nom }}</td><td>{{ r.prenom }}</td><td>{{ r.email }}</td>
       <td>{{ r.formation.name }}</td><td>{{ r.trainer.first_name }} {{ r.trainer.last_name }}</td>
       <td>{{ r.date_formation.strftime("%d/%m/%Y") }}</td>
-      <td>{% if r.attestation_pdf_path %}<a href="{{ url_for('get_file', relpath=r.attestation_pdf_path) }}" target="_blank">PDF</a>{% else %}—{% endif %}</td>
+      <td>{% if r.attestation_pdf_path %}<a href="{{ url_for('get_attestation', filename=record.attestation_pdf_path) }}" target="_blank">PDF</a>{% else %}—{% endif %}</td>
       <td class="actions-col">
         <form method="post" action="{{ url_for('admin_delete', record_id=r.id) }}" onsubmit="return confirm('Supprimer cet enregistrement ?');">
           <button type="submit" class="danger">Supprimer</button>
