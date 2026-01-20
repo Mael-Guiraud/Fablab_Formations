@@ -587,23 +587,37 @@ def create_app() -> Flask:
     def admin_delete(record_id: int):
         record = FormationRecord.query.get_or_404(record_id)
 
-        # Supprimer le PDF si présent
-        rel = (record.attestation_pdf_path or "").replace("\\", "/")
-        if rel.startswith("uploads/"):
-            abs_p = os.path.join(app.root_path, rel)
-            try:
-                if os.path.isfile(abs_p):
-                    os.remove(abs_p)
-            except Exception:
-                pass
+        # 1) Supprimer le PDF sur disque (OneDrive) si présent
+        try:
+            target_dir = app.config["ATTESTATION_DIR"]
 
+            # Nom DISQUE (avec email) = celui utilisé à la génération
+            formation_part = safe_filename(record.formation.name)
+            email_part = safe_filename(record.email.replace("@", "_at_"))
+            date_part = record.date_formation.isoformat()
+
+            pdf_name_disk = (
+                f"{safe_filename(record.prenom)}_{safe_filename(record.nom)}"
+                f"__{email_part}__{formation_part}_{date_part}.pdf"
+            )
+
+            abs_pdf = os.path.join(target_dir, pdf_name_disk)
+
+            if os.path.isfile(abs_pdf):
+                os.remove(abs_pdf)
+
+        except Exception as ex:
+            # On ne bloque pas la suppression DB, mais on log
+            app.logger.exception(f"Suppression PDF impossible pour record_id={record_id}: {ex}")
+
+        # 2) Supprimer l'enregistrement DB
         db.session.delete(record)
         db.session.commit()
 
         flash("Enregistrement supprimé.", "ok")
         return redirect(url_for("admin_list"))
-
     # -------------------------
+
     # ADMIN - Export CSV
     # -------------------------
     @app.get(admin_base + "/export/csv")
