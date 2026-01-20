@@ -181,21 +181,37 @@ def create_app() -> Flask:
 
         y -= 4 * mm
         return y
+    def email_to_token(email: str) -> str:
+        return email.strip().lower().replace("@", "_at_")
+
+    def build_attestation_filename(prenom: str, nom: str, email: str, formation_nom: str, date_iso: str) -> str:
+        # IMPORTANT: formation_nom doit déjà être "safe" (espaces -> _, pas de caractères Windows interdits)
+        return f"{prenom}_{nom}__{email_to_token(email)}__{formation_nom}_{date_iso}.pdf"
+
+    def build_attestation_dbname(prenom: str, nom: str, formation_nom: str, date_iso: str) -> str:
+        return f"{prenom}_{nom}__{formation_nom}_{date_iso}.pdf"
 
     def generate_attestation_pdf(record: FormationRecord, sig_forme_img: ImageReader) -> str:
-        # Filename required: prenom_nom__email_at_viacesi.fr__formation_date.pdf
+        # Filename DISK: prenom_nom__email_at_...__formation_date.pdf
         formation_part = safe_filename(record.formation.name)
         email_part = safe_filename(record.email.replace("@", "_at_"))
         date_part = record.date_formation.isoformat()
-        pdf_name = (
+
+        pdf_name_disk = (
             f"{safe_filename(record.prenom)}_{safe_filename(record.nom)}"
             f"__{email_part}__{formation_part}_{date_part}.pdf"
+        )
+
+        # Filename DB: prenom_nom__formation_date.pdf  (sans email)
+        pdf_name_db = (
+            f"{safe_filename(record.prenom)}_{safe_filename(record.nom)}"
+            f"__{formation_part}_{date_part}.pdf"
         )
 
         target_dir = app.config["ATTESTATION_DIR"]
         os.makedirs(target_dir, exist_ok=True)
 
-        abs_pdf = os.path.join(target_dir, pdf_name)
+        abs_pdf = os.path.join(target_dir, pdf_name_disk)
 
 
         buf = io.BytesIO()
@@ -312,7 +328,8 @@ def create_app() -> Flask:
         with open(abs_pdf, "wb") as f:
             f.write(buf.read())
 
-        return pdf_name
+        return pdf_name_db, pdf_name_disk
+
 
     def records_query(formation_id: str | None):
         q = FormationRecord.query.order_by(FormationRecord.created_at.desc())
@@ -432,9 +449,13 @@ def create_app() -> Flask:
         db.session.add(record)
         db.session.commit()
 
-        rel_pdf = generate_attestation_pdf(record, sig_forme_img)
-        record.attestation_pdf_path = rel_pdf
+        pdf_name_db, pdf_name_disk = generate_attestation_pdf(record, sig_forme_img)
+
+        # En DB : sans email
+        record.attestation_pdf_path = pdf_name_db
+
         db.session.commit()
+
 
         return render_template("success.html", record=record)
 
@@ -448,12 +469,35 @@ def create_app() -> Flask:
             abort(404)
         return send_file(abs_path)
     @app.get("/attestation/<path:filename>")
-    def get_attestation(filename: str):
-        # Empêche la traversée de chemin (..)
-        abs_path = safe_join(app.config["ATTESTATION_DIR"], filename)
-        if not abs_path or not os.path.isfile(abs_path):
+    def get_attestation(filename):
+        target_dir = app.config["ATTESTATION_DIR"]
+        abs_path = os.path.join(target_dir, filename)
+
+        # 1) si le nom existe tel quel
+        if os.path.exists(abs_path):
+            return send_file(abs_path, mimetype="application/pdf")
+
+        # 2) sinon, on suppose que filename est le nom DB (sans email)
+        #    on retrouve l'enregistrement correspondant, puis on reconstruit le nom DISK
+        r = FormationRecord.query.filter_by(attestation_pdf_path=filename).first()
+        if not r:
             abort(404)
-        return send_file(abs_path)
+
+        formation_part = safe_filename(r.formation.name)
+        email_part = safe_filename(r.email.replace("@", "_at_"))
+        date_part = r.date_formation.isoformat()
+
+        disk_name = (
+            f"{safe_filename(r.prenom)}_{safe_filename(r.nom)}"
+            f"__{email_part}__{formation_part}_{date_part}.pdf"
+        )
+
+        abs_path2 = os.path.join(target_dir, disk_name)
+        if not os.path.exists(abs_path2):
+            abort(404)
+
+        return send_file(abs_path2, mimetype="application/pdf")
+
     # -------------------------
     # ADMIN - Auth
     # -------------------------
