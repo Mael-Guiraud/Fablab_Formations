@@ -101,13 +101,35 @@
               </div>
 
               <div class="tool-block">
-                <div class="text-title">Nouvelle signature (laisser vide = inchangé)</div>
-                <canvas id="sig_{{ t.id }}" class="sig-canvas small"></canvas>
-                <div class="sig-actions">
-                  <button type="button" class="btn secondary" id="clear_{{ t.id }}">Effacer</button>
-                </div>
-                <input type="hidden" name="signature_dataurl" id="sigdata_{{ t.id }}">
-              </div>
+  <div class="text-title">Signature actuelle</div>
+
+  {% if t.signature_path %}
+    <img class="sig-thumb"
+         src="{{ url_for('admin_trainer_signature', trainer_id=t.id) }}"
+         alt="Signature actuelle">
+  {% else %}
+    <em>Aucune signature enregistrée</em>
+  {% endif %}
+
+  <div class="text-title" style="margin-top:10px;">
+    Nouvelle signature (laisser vide = inchangé)
+  </div>
+
+  <canvas id="sig_{{ t.id }}" class="sig-canvas small"></canvas>
+
+  <div class="sig-actions">
+    <button type="button"
+            class="btn secondary"
+            id="clear_{{ t.id }}">
+      Effacer
+    </button>
+  </div>
+
+  <input type="hidden"
+         name="signature_dataurl"
+         id="sigdata_{{ t.id }}">
+</div>
+
 
             </div>
           </td>
