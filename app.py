@@ -205,7 +205,7 @@ def create_app() -> Flask:
         # Filename DB: prenom_nom__formation_date.pdf  (sans email)
         pdf_name_db = (
             f"{safe_filename(record.prenom)}_{safe_filename(record.nom)}"
-            f"__{formation_part}_{date_part}.pdf"
+            f"_{formation_part}_{date_part}.pdf"
         )
 
         target_dir = app.config["ATTESTATION_DIR"]
@@ -489,7 +489,7 @@ def create_app() -> Flask:
 
         disk_name = (
             f"{safe_filename(r.prenom)}_{safe_filename(r.nom)}"
-            f"__{email_part}__{formation_part}_{date_part}.pdf"
+            f"_{email_part}__{formation_part}_{date_part}.pdf"
         )
 
         abs_path2 = os.path.join(target_dir, disk_name)
