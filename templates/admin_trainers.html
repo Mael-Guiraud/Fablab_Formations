@@ -1,12 +1,7 @@
 {# templates/admin_trainers.html #}
 {% extends "base_admin.html" %}
+{% set title="Formateurs" %}
 {% block content %}
-
-<h1>Formateurs</h1>
-
-<!-- ===================================================== -->
-<!-- CRÉATION FORMATEUR -->
-<!-- ===================================================== -->
 
 <div class="card">
   <h2>Créer un formateur</h2>
@@ -32,226 +27,214 @@
     </div>
 
     <div class="sig-card" style="margin-top:12px;">
-      <h3>Signature intervenant (obligatoire)</h3>
+      <div class="text-title">Signature intervenant</div>
       <canvas id="createSigCanvas" class="sig-canvas"></canvas>
       <div class="sig-actions">
-        <button type="button" class="btn secondary" id="clearCreateSig">Effacer</button>
+        <button class="btn secondary" id="clearCreateSig" type="button">Effacer</button>
       </div>
       <input type="hidden" name="signature_dataurl" id="create_signature_dataurl">
+      <small>Signer à la souris/stylet puis cliquer sur “Créer”.</small>
     </div>
 
-    <button class="btn primary" type="submit">Créer</button>
+    <button type="submit">Créer</button>
   </form>
 </div>
-
-<hr>
-
-<!-- ===================================================== -->
-<!-- LISTE FORMATEURS -->
-<!-- ===================================================== -->
 
 <div class="card">
-  <h2>Liste des formateurs</h2>
+  <h2>Liste</h2>
 
-  {% if trainers|length == 0 %}
-    <p>Aucun formateur.</p>
-  {% else %}
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Nom</th>
-            <th>Prénom</th>
-            <th style="text-align:center;">Actif</th>
-            <th>Signature</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
+  <table class="table trainers-table">
+    <thead>
+      <tr>
+        <th>Nom</th>
+        <th>Prénom</th>
+        <th style="width:110px;">Actif</th>
+        <th style="width:260px;">Actions</th>
+      </tr>
+    </thead>
 
-        {% for t in trainers %}
-          <tr>
-            <td>{{ t.last_name }}</td>
-            <td>{{ t.first_name }}</td>
+    <tbody>
+      {% for t in trainers %}
+      <form method="post" action="{{ url_for('admin_trainers_update', trainer_id=t.id) }}">
+        <!-- Ligne 1 : infos principales -->
+        <tr class="row-main">
+          <td>
+            <input name="last_name" value="{{ t.last_name }}" required style="width:100%;">
+          </td>
 
-            <td style="text-align:center;">
-              <input type="checkbox" {% if t.is_active %}checked{% endif %} disabled>
-            </td>
+          <td>
+            <input name="first_name" value="{{ t.first_name }}" required style="width:100%;">
+          </td>
 
-            <td>
-              {% if t.signature_path %}
-                <div class="sig-inline">
-                  <img class="sig-thumb"
-                       src="{{ url_for('admin_trainer_signature', trainer_id=t.id) }}">
-                  <a class="btn small"
-                     target="_blank"
-                     href="{{ url_for('admin_trainer_signature', trainer_id=t.id) }}">
-                     Voir
-                  </a>
+          <td style="text-align:center;">
+            <label class="switch">
+              <input type="checkbox" name="is_active" {% if t.is_active %}checked{% endif %}>
+              <span class="switch-label">{{ "Oui" if t.is_active else "Non" }}</span>
+            </label>
+          </td>
+
+          <td class="actions-col">
+            <button type="submit">Mettre à jour</button>
+
+            <form method="post"
+                  action="{{ url_for('admin_trainers_delete', trainer_id=t.id) }}"
+                  onsubmit="return confirm('Supprimer ce formateur ?');"
+                  style="display:inline;">
+              <button type="submit" class="danger">Supprimer</button>
+            </form>
+          </td>
+        </tr>
+
+        <!-- Ligne 2 : code + signature (ce que tu veux vraiment) -->
+        <tr class="row-tools">
+          <td colspan="4">
+            <div class="tools-grid">
+
+              <div class="tool-block">
+                <div class="text-title">Nouveau code (laisser vide = inchangé)</div>
+                <input type="password"
+                       name="access_code"
+                       minlength="4"
+                       autocomplete="new-password"
+                       placeholder="Nouveau code">
+                <small>Min 4 caractères.</small>
+              </div>
+
+              <div class="tool-block">
+                <div class="text-title">Nouvelle signature (laisser vide = inchangé)</div>
+                <canvas id="sig_{{ t.id }}" class="sig-canvas small"></canvas>
+                <div class="sig-actions">
+                  <button type="button" class="btn secondary" id="clear_{{ t.id }}">Effacer</button>
                 </div>
-              {% else %}
-                —
-              {% endif %}
-            </td>
+                <input type="hidden" name="signature_dataurl" id="sigdata_{{ t.id }}">
+              </div>
 
-            <td class="actions-col">
-              <button class="btn"
-                      type="button"
-                      onclick="openEditTrainer(
-                        {{ t.id }},
-                        {{ t.last_name|tojson }},
-                        {{ t.first_name|tojson }},
-                        {{ 1 if t.is_active else 0 }}
-                      )">
-                Modifier
-              </button>
-
-              <form method="post"
-                    action="{{ url_for('admin_trainers_delete', trainer_id=t.id) }}"
-                    style="display:inline;">
-                <button class="btn danger"
-                        type="submit"
-                        onclick="return confirm('Supprimer ce formateur ?');">
-                  Supprimer
-                </button>
-              </form>
-            </td>
-          </tr>
-        {% endfor %}
-
-        </tbody>
-      </table>
-    </div>
-  {% endif %}
+            </div>
+          </td>
+        </tr>
+      </form>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
 
-<hr>
+<style>
+.trainers-table .row-main td{ vertical-align: middle; }
+.trainers-table .row-tools td{ background:#fafafa; }
 
-<!-- ===================================================== -->
-<!-- ÉDITION FORMATEUR -->
-<!-- ===================================================== -->
+.tools-grid{
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 18px;
+  padding: 10px 2px;
+  align-items: start;
+}
 
-<div class="card" id="editCard" style="display:none;">
-  <h2>Modifier un formateur</h2>
+.tool-block small{ color:#555; }
 
-  <form method="post" id="editForm">
-    <div class="grid">
-      <label>Nom*
-        <input name="last_name" id="edit_last_name" required>
-      </label>
+.text-title{ font-weight: 700; margin-bottom: 6px; }
 
-      <label>Prénom*
-        <input name="first_name" id="edit_first_name" required>
-      </label>
+.switch{ display:inline-flex; align-items:center; gap:8px; }
+.switch-label{ font-size:0.9em; color:#444; }
 
-      <label>Actif
-        <select name="is_active" id="edit_is_active">
-          <option value="1">Oui</option>
-          <option value="0">Non</option>
-        </select>
-      </label>
+.actions-col{ white-space: nowrap; }
+.actions-col button{ margin-right: 6px; }
 
-      <label>Nouveau code (optionnel)
-        <input type="password"
-               name="access_code"
-               minlength="4"
-               autocomplete="new-password"
-               placeholder="laisser vide = inchangé">
-      </label>
-    </div>
+.sig-canvas{
+  width: 100%;
+  height: 160px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
 
-    <div style="margin-top:10px;">
-      <strong>Signature actuelle :</strong><br>
-      <img id="currentSigImg" class="sig-thumb">
-    </div>
-
-    <div class="sig-card" style="margin-top:10px;">
-      <h3>Nouvelle signature (optionnel)</h3>
-      <canvas id="editSigCanvas" class="sig-canvas"></canvas>
-      <div class="sig-actions">
-        <button type="button" class="btn secondary" id="clearEditSig">Effacer</button>
-      </div>
-      <input type="hidden" name="signature_dataurl" id="edit_signature_dataurl">
-    </div>
-
-    <div style="margin-top:12px;">
-      <button class="btn primary" type="submit">Enregistrer</button>
-      <button class="btn secondary" type="button" onclick="closeEditTrainer()">Annuler</button>
-    </div>
-  </form>
-</div>
-
-<!-- ===================================================== -->
-<!-- JS -->
-<!-- ===================================================== -->
+.sig-canvas.small{ height: 140px; }
+</style>
 
 <script>
 (function(){
+  function setupPad(canvasId, hiddenId, clearBtnId){
+    const canvas = document.getElementById(canvasId);
+    const hidden = document.getElementById(hiddenId);
+    const clearBtn = document.getElementById(clearBtnId);
+    if(!canvas || !hidden || !clearBtn) return;
 
-function setupPad(canvasId, hiddenId, clearBtnId){
-  const canvas = document.getElementById(canvasId);
-  const hidden = document.getElementById(hiddenId);
-  if(!canvas || !hidden) return;
+    const ctx = canvas.getContext("2d");
+    let drawing = false;
 
-  const ctx = canvas.getContext("2d");
-  let drawing = false;
+    function resize(){
+      const r = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(r.width * dpr);
+      canvas.height = Math.round(r.height * dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "#111";
+      ctx.clearRect(0,0,r.width,r.height);
+    }
 
-  function resize(){
-    const r = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = r.width * dpr;
-    canvas.height = r.height * dpr;
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.clearRect(0,0,r.width,r.height);
+    function pos(e){
+      const r = canvas.getBoundingClientRect();
+      const x = (e.touches?e.touches[0].clientX:e.clientX) - r.left;
+      const y = (e.touches?e.touches[0].clientY:e.clientY) - r.top;
+      return {x,y};
+    }
+
+    function start(e){
+      e.preventDefault();
+      drawing = true;
+      const p = pos(e);
+      ctx.beginPath();
+      ctx.moveTo(p.x,p.y);
+    }
+
+    function move(e){
+      if(!drawing) return;
+      e.preventDefault();
+      const p = pos(e);
+      ctx.lineTo(p.x,p.y);
+      ctx.stroke();
+    }
+
+    function end(e){
+      if(!drawing) return;
+      e.preventDefault();
+      drawing = false;
+    }
+
+    canvas.addEventListener("mousedown", start);
+    canvas.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+
+    canvas.addEventListener("touchstart", start, {passive:false});
+    canvas.addEventListener("touchmove", move, {passive:false});
+    canvas.addEventListener("touchend", end, {passive:false});
+
+    clearBtn.addEventListener("click", (e)=>{
+      e.preventDefault();
+      const r = canvas.getBoundingClientRect();
+      ctx.clearRect(0,0,r.width,r.height);
+      hidden.value = "";
+    });
+
+    const form = canvas.closest("form");
+    if(form){
+      form.addEventListener("submit", ()=>{
+        hidden.value = canvas.toDataURL("image/png");
+      });
+    }
+
+    resize();
+    window.addEventListener("resize", resize);
   }
 
-  function pos(e){
-    const r = canvas.getBoundingClientRect();
-    const x = (e.touches?e.touches[0].clientX:e.clientX)-r.left;
-    const y = (e.touches?e.touches[0].clientY:e.clientY)-r.top;
-    return {x,y};
-  }
-
-  canvas.addEventListener("mousedown", e=>{drawing=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y);});
-  canvas.addEventListener("mousemove", e=>{if(!drawing)return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke();});
-  window.addEventListener("mouseup", ()=>drawing=false);
-
-  document.getElementById(clearBtnId).onclick = ()=>{
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    hidden.value="";
-  };
-
-  canvas.closest("form").addEventListener("submit", ()=>{
-    hidden.value = canvas.toDataURL("image/png");
+  document.addEventListener("DOMContentLoaded", ()=>{
+    setupPad("createSigCanvas", "create_signature_dataurl", "clearCreateSig");
+    {% for t in trainers %}
+      setupPad("sig_{{ t.id }}", "sigdata_{{ t.id }}", "clear_{{ t.id }}");
+    {% endfor %}
   });
-
-  resize();
-}
-
-setupPad("createSigCanvas","create_signature_dataurl","clearCreateSig");
-setupPad("editSigCanvas","edit_signature_dataurl","clearEditSig");
-
-window.openEditTrainer = function(id, ln, fn, active){
-  document.getElementById("edit_last_name").value = ln;
-  document.getElementById("edit_first_name").value = fn;
-  document.getElementById("edit_is_active").value = active ? "1":"0";
-
-  const link = "{{ url_for('admin_trainer_signature', trainer_id=0) }}".replace("/0","/"+id);
-  document.getElementById("currentSigImg").src = link;
-
-  document.getElementById("editForm").action =
-    "{{ url_for('admin_trainers_update', trainer_id=0) }}".replace("/0","/"+id);
-
-  document.getElementById("editCard").style.display="block";
-  document.getElementById("editCard").scrollIntoView({behavior:"smooth"});
-};
-
-window.closeEditTrainer = function(){
-  document.getElementById("editCard").style.display="none";
-};
-
 })();
 </script>
 

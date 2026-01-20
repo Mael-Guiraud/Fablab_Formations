@@ -743,12 +743,7 @@ def create_app() -> Flask:
         ln = (request.form.get("last_name") or "").strip()
         fn = (request.form.get("first_name") or "").strip()
         code = (request.form.get("access_code") or "").strip()
-
-        # Nouveau template: select is_active = "1" / "0"
-        is_active_val = (request.form.get("is_active") or "0").strip()
-        is_active = (is_active_val == "1")
-
-        # Nouveau template: canvas -> dataURL (png)
+        is_active = (request.form.get("is_active") or "off") == "on"
         sig_dataurl = (request.form.get("signature_dataurl") or "").strip()
 
         if not ln or not fn:
@@ -762,18 +757,15 @@ def create_app() -> Flask:
             flash("Nom/prénom déjà utilisés par un autre formateur.", "error")
             return redirect(url_for("admin_trainers"))
 
-        # Code: ne change QUE si champ non vide
         if code:
             if len(code) < 4:
                 flash("Code intervenant min 4 caractères.", "error")
                 return redirect(url_for("admin_trainers"))
             t.set_access_code(code)
 
-        # Signature: ne change QUE si une dataURL est fournie
-        # (si tu cliques "Enregistrer" sans signer, on ne touche pas à la signature)
         if sig_dataurl:
             try:
-                png_bytes = png_bytes_from_dataurl(sig_dataurl)  # fonction util existante chez toi
+                png_bytes = png_bytes_from_dataurl(sig_dataurl)  # doit exister chez toi
             except Exception as ex:
                 flash(f"Signature invalide: {ex}", "error")
                 return redirect(url_for("admin_trainers"))
@@ -782,7 +774,7 @@ def create_app() -> Flask:
             abs_dir = os.path.join(app.root_path, rel_dir)
             os.makedirs(abs_dir, exist_ok=True)
 
-            fname = f"trainer_{safe_filename(fn + '_' + ln)}_{int(utcnow().timestamp())}.png"
+            fname = f"trainer_{safe_filename(fn+'_'+ln)}_{int(utcnow().timestamp())}.png"
             abs_path = os.path.join(abs_dir, fname)
 
             with open(abs_path, "wb") as f:
@@ -797,6 +789,7 @@ def create_app() -> Flask:
 
         flash("Formateur mis à jour.", "ok")
         return redirect(url_for("admin_trainers"))
+
 
 
     @app.post(admin_base + "/trainers/delete/<int:trainer_id>")
