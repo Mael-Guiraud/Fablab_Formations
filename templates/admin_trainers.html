@@ -11,7 +11,17 @@
     <div class="grid">
       <label>Nom*<input name="last_name" required></label>
       <label>Prénom*<input name="first_name" required></label>
-      <label>Code intervenant (min 4)*<input name="access_code" required minlength="4" placeholder="ex: 4821"></label>
+      <label>Code intervenant (min 4)*
+  <input type="password"
+         name="access_code"
+         required
+         minlength="4"
+         autocomplete="new-password"
+         autocapitalize="off"
+         spellcheck="false"
+         placeholder="ex: 4821">
+</label>
+
     </div>
 
     <div class="sig-card" style="margin-top:12px;">
@@ -63,8 +73,16 @@
             </td>
 
             <td>
-              <input name="access_code" minlength="4" placeholder="(laisser vide = inchangé)">
-              <small>Min 4 caractères</small>
+              <input type="password"
+       name="access_code"
+       minlength="4"
+       autocomplete="new-password"
+       autocapitalize="off"
+       spellcheck="false"
+       placeholder="(laisser vide = inchangé)"
+       value="">
+<small>Min 4 caractères</small>
+
             </td>
 
             <td>

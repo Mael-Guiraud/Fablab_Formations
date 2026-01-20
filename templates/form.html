@@ -71,7 +71,15 @@
 </div>
 
 <label style="display:block;margin-top:12px;">Code intervenant* 
-  <input name="access_code" required minlength="4" placeholder="Code fourni par l'intervenant">
+  <input type="password"
+       name="intervenant_code"
+       required
+       minlength="4"
+       autocomplete="new-password"
+       autocapitalize="off"
+       spellcheck="false"
+       placeholder="Code intervenant">
+
   <small>Le code est obligatoire pour valider l'habilitation.</small>
 </label>
 
