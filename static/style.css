@@ -33,3 +33,6 @@ th,td{overflow-wrap:anywhere;word-break:break-word}
 
 /* Signature thumbnails */
 .sig-thumb{max-width:220px;height:auto;display:block}
+.sig-canvas{width:320px; height:140px; background:#fff; border:1px solid #ddd; border-radius:8px}
+.table-wrap{max-width:100%; overflow-x:auto}
+.actions-col{white-space:nowrap}

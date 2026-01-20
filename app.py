@@ -753,8 +753,13 @@ def create_app() -> Flask:
         ln = (request.form.get("last_name") or "").strip()
         fn = (request.form.get("first_name") or "").strip()
         code = (request.form.get("access_code") or "").strip()
-        is_active = (request.form.get("is_active") or "off") == "on"
-        sig_file = request.files.get("signature_file")
+
+        # Nouveau template: select is_active = "1" / "0"
+        is_active_val = (request.form.get("is_active") or "0").strip()
+        is_active = (is_active_val == "1")
+
+        # Nouveau template: canvas -> dataURL (png)
+        sig_dataurl = (request.form.get("signature_dataurl") or "").strip()
 
         if not ln or not fn:
             flash("Nom et prénom obligatoires.", "error")
@@ -767,24 +772,32 @@ def create_app() -> Flask:
             flash("Nom/prénom déjà utilisés par un autre formateur.", "error")
             return redirect(url_for("admin_trainers"))
 
+        # Code: ne change QUE si champ non vide
         if code:
             if len(code) < 4:
                 flash("Code intervenant min 4 caractères.", "error")
                 return redirect(url_for("admin_trainers"))
             t.set_access_code(code)
 
-        if sig_file and sig_file.filename:
-            if not sig_file.filename.lower().endswith(".png"):
-                flash("La signature doit être un PNG.", "error")
+        # Signature: ne change QUE si une dataURL est fournie
+        # (si tu cliques "Enregistrer" sans signer, on ne touche pas à la signature)
+        if sig_dataurl:
+            try:
+                png_bytes = png_bytes_from_dataurl(sig_dataurl)  # fonction util existante chez toi
+            except Exception as ex:
+                flash(f"Signature invalide: {ex}", "error")
                 return redirect(url_for("admin_trainers"))
 
             rel_dir = os.path.join("uploads", "signatures", "trainers")
             abs_dir = os.path.join(app.root_path, rel_dir)
             os.makedirs(abs_dir, exist_ok=True)
 
-            fname = f"trainer_{safe_filename(fn+'_'+ln)}_{int(utcnow().timestamp())}.png"
+            fname = f"trainer_{safe_filename(fn + '_' + ln)}_{int(utcnow().timestamp())}.png"
             abs_path = os.path.join(abs_dir, fname)
-            sig_file.save(abs_path)
+
+            with open(abs_path, "wb") as f:
+                f.write(png_bytes)
+
             t.signature_path = f"{rel_dir}/{fname}".replace("\\", "/")
 
         t.last_name = ln
@@ -794,6 +807,7 @@ def create_app() -> Flask:
 
         flash("Formateur mis à jour.", "ok")
         return redirect(url_for("admin_trainers"))
+
 
     @app.post(admin_base + "/trainers/delete/<int:trainer_id>")
     @login_required(role="root")

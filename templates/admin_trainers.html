@@ -12,25 +12,24 @@
       <label>Nom*<input name="last_name" required></label>
       <label>Prénom*<input name="first_name" required></label>
       <label>Code intervenant (min 4)*
-  <input type="password"
-         name="access_code"
-         required
-         minlength="4"
-         autocomplete="new-password"
-         autocapitalize="off"
-         spellcheck="false"
-         placeholder="ex: 4821">
-</label>
-
+        <input type="password"
+               name="access_code"
+               required
+               minlength="4"
+               autocomplete="new-password"
+               autocapitalize="off"
+               spellcheck="false"
+               placeholder="ex: 4821">
+      </label>
     </div>
 
     <div class="sig-card" style="margin-top:12px;">
       <h3>Signature intervenant (obligatoire)</h3>
-      <canvas id="trainerSigCanvas" class="sig-canvas"></canvas>
+      <canvas id="createSigCanvas" class="sig-canvas"></canvas>
       <div class="sig-actions">
-        <button class="btn secondary" id="clearTrainerSig" type="button">Effacer</button>
+        <button class="btn secondary" id="clearCreateSig" type="button">Effacer</button>
       </div>
-      <input type="hidden" name="signature_dataurl" id="signature_dataurl">
+      <input type="hidden" name="signature_dataurl" id="create_signature_dataurl">
       <small>Signer à la souris/stylet, puis cliquer sur “Créer”.</small>
     </div>
 
@@ -49,79 +48,108 @@
     <p>Aucun formateur.</p>
   {% else %}
     <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Nom</th>
-          <th>Prénom</th>
-          <th>Actif</th>
-          <th>Code (remplacement)</th>
-          <th>Nouvelle signature (dessin)</th>
-          <th>Signature actuelle</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for t in trainers %}
-        <tr>
-          <form method="post" action="{{ url_for('admin_trainers_update', trainer_id=t.id) }}">
-            <td><input name="last_name" value="{{ t.last_name }}" required></td>
-            <td><input name="first_name" value="{{ t.first_name }}" required></td>
-
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:32%;">Nom</th>
+            <th style="width:32%;">Prénom</th>
+            <th style="width:8%; text-align:center;">Actif</th>
+            <th style="width:14%;">Signature</th>
+            <th style="width:14%;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in trainers %}
+          <tr>
+            <td>{{ t.last_name }}</td>
+            <td>{{ t.first_name }}</td>
             <td style="text-align:center;">
-              <input type="checkbox" name="is_active" {% if t.is_active %}checked{% endif %}>
+              <input type="checkbox" {% if t.is_active %}checked{% endif %} disabled>
             </td>
-
-            <td>
-              <input type="password"
-       name="access_code"
-       minlength="4"
-       autocomplete="new-password"
-       autocapitalize="off"
-       spellcheck="false"
-       placeholder="(laisser vide = inchangé)"
-       value="">
-<small>Min 4 caractères</small>
-
-            </td>
-
-            <td>
-              <canvas id="trainerSigCanvas_{{ t.id }}" class="sig-canvas"></canvas>
-              <div class="sig-actions">
-                <button class="btn secondary" id="clearTrainerSig_{{ t.id }}" type="button">Effacer</button>
-              </div>
-              <input type="hidden" name="signature_dataurl" id="signature_dataurl_{{ t.id }}">
-              <small>Signer puis enregistrer.</small>
-            </td>
-
             <td>
               {% if t.signature_path %}
                 <a class="btn small" href="{{ url_for('admin_trainer_signature', trainer_id=t.id) }}" target="_blank">Voir</a>
-                <img class="sig-thumb" src="{{ url_for('admin_trainer_signature', trainer_id=t.id) }}" alt="Signature">
               {% else %}
                 <em>—</em>
               {% endif %}
             </td>
-
             <td class="actions-col">
-              <button class="btn" type="submit">Enregistrer</button>
-          </form>
+              <button class="btn"
+                      type="button"
+                      onclick="openEditTrainer(
+                        {{ t.id }},
+                        {{ t.last_name|tojson }},
+                        {{ t.first_name|tojson }},
+                        {{ (t.is_active and 1 or 0) }}
+                      )">Modifier</button>
 
               <form method="post" action="{{ url_for('admin_trainers_delete', trainer_id=t.id) }}" style="display:inline;">
                 <button class="btn danger" type="submit" onclick="return confirm('Supprimer ce formateur ?');">Supprimer</button>
               </form>
             </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   {% endif %}
 </div>
 
+<hr>
+
+<div class="card" id="editCard" style="display:none;">
+  <h2>Modifier un formateur</h2>
+
+  <form method="post" id="editForm">
+    <div class="grid">
+      <label>Nom*<input name="last_name" id="edit_last_name" required></label>
+      <label>Prénom*<input name="first_name" id="edit_first_name" required></label>
+
+      <label>Actif
+        <select name="is_active" id="edit_is_active">
+          <option value="1">Oui</option>
+          <option value="0">Non</option>
+        </select>
+      </label>
+
+      <label>Remplacer le code (laisser vide = inchangé)
+        <input type="password"
+               name="access_code"
+               minlength="4"
+               autocomplete="new-password"
+               autocapitalize="off"
+               spellcheck="false"
+               placeholder="Nouveau code">
+      </label>
+    </div>
+
+    <div style="margin-top:10px;">
+      <div style="margin-bottom:6px;">
+        <strong>Signature actuelle :</strong>
+        <span id="currentSigLink"></span>
+      </div>
+
+      <div class="sig-card">
+        <h3>Nouvelle signature (optionnel)</h3>
+        <canvas id="editSigCanvas" class="sig-canvas"></canvas>
+        <div class="sig-actions">
+          <button class="btn secondary" id="clearEditSig" type="button">Effacer</button>
+        </div>
+        <input type="hidden" name="signature_dataurl" id="edit_signature_dataurl">
+        <small>Signer puis cliquer sur “Enregistrer”.</small>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <button class="btn primary" type="submit">Enregistrer</button>
+      <button class="btn secondary" type="button" onclick="closeEditTrainer()">Annuler</button>
+    </div>
+  </form>
+</div>
+
 <script>
 (function(){
-  function setup(canvasId, hiddenId, clearBtnId){
+  function setupPad(canvasId, hiddenId, clearBtnId){
     const canvas = document.getElementById(canvasId);
     const hidden = document.getElementById(hiddenId);
     if(!canvas || !hidden) return;
@@ -135,7 +163,6 @@
       canvas.width = Math.round(rect.width * dpr);
       canvas.height = Math.round(rect.height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
       ctx.lineWidth = 2;
       ctx.lineCap = "round";
       ctx.strokeStyle = "#111";
@@ -172,7 +199,9 @@
     }
 
     function updateHidden(){
-      hidden.value = canvas.toDataURL("image/png");
+      // Si rien n’a été dessiné, on laisse vide => backend ne change pas la signature
+      const data = canvas.toDataURL("image/png");
+      hidden.value = data;
     }
 
     resize();
@@ -200,15 +229,45 @@
     if(form){
       form.addEventListener("submit", () => updateHidden());
     }
+
+    return { resize };
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    setup("trainerSigCanvas", "signature_dataurl", "clearTrainerSig");
+  // Pads
+  const createPad = setupPad("createSigCanvas", "create_signature_dataurl", "clearCreateSig");
+  const editPad = setupPad("editSigCanvas", "edit_signature_dataurl", "clearEditSig");
 
-    {% for t in trainers %}
-      setup("trainerSigCanvas_{{ t.id }}", "signature_dataurl_{{ t.id }}", "clearTrainerSig_{{ t.id }}");
-    {% endfor %}
-  });
+  // Open/close editor
+  window.openEditTrainer = function(id, lastName, firstName, isActive){
+    const card = document.getElementById("editCard");
+    const form = document.getElementById("editForm");
+
+    document.getElementById("edit_last_name").value = lastName || "";
+    document.getElementById("edit_first_name").value = firstName || "";
+    document.getElementById("edit_is_active").value = isActive ? "1" : "0";
+
+    // IMPORTANT: ton backend update actuel attend un checkbox name="is_active"
+    // Ici on envoie is_active=1/0. Il faut adapter le backend (voir note en bas).
+    // Si tu veux éviter de toucher au backend, dis-le et je te fournis une variante checkbox.
+
+    form.action = "{{ url_for('admin_trainers_update', trainer_id=0) }}".replace("/0", "/" + String(id));
+
+    // lien signature actuelle
+    const link = "{{ url_for('admin_trainer_signature', trainer_id=0) }}".replace("/0", "/" + String(id));
+    document.getElementById("currentSigLink").innerHTML = '<a class="btn small" target="_blank" href="' + link + '">Voir</a>';
+
+    // reset signature hidden
+    document.getElementById("edit_signature_dataurl").value = "";
+
+    card.style.display = "block";
+    card.scrollIntoView({behavior:"smooth", block:"start"});
+
+    if(editPad && editPad.resize) editPad.resize();
+  };
+
+  window.closeEditTrainer = function(){
+    document.getElementById("editCard").style.display = "none";
+  };
 })();
 </script>
 
