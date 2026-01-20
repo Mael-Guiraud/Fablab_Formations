@@ -593,6 +593,12 @@ def create_app() -> Flask:
         if pdf_name:
             target_dir = app.config["ATTESTATION_DIR"]
             abs_pdf = os.path.join(target_dir, pdf_name)
+            print("=== DELETE ATTESTATION ===")
+            print("DB filename :", record.attestation_pdf_path)
+            print("ATTESTATION_DIR :", app.config["ATTESTATION_DIR"])
+            print("FULL PATH :", abs_pdf)
+            print("EXISTS :", os.path.exists(abs_pdf))
+            print("==========================")
 
             try:
                 if os.path.isfile(abs_pdf):
