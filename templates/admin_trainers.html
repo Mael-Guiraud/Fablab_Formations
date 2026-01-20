@@ -38,6 +38,7 @@
   {% if trainers|length == 0 %}
     <p>Aucun formateur.</p>
   {% else %}
+    <div class="table-wrap">
     <table class="table">
       <thead>
         <tr>
@@ -45,7 +46,7 @@
           <th>Prénom</th>
           <th>Actif</th>
           <th>Code (remplacement)</th>
-          <th>Signature (remplacement PNG)</th>
+          <th>Nouvelle signature (dessin)</th>
           <th>Signature actuelle</th>
           <th>Actions</th>
         </tr>
@@ -53,7 +54,7 @@
       <tbody>
         {% for t in trainers %}
         <tr>
-          <form method="post" action="{{ url_for('admin_trainers_update', trainer_id=t.id) }}" enctype="multipart/form-data">
+          <form method="post" action="{{ url_for('admin_trainers_update', trainer_id=t.id) }}">
             <td><input name="last_name" value="{{ t.last_name }}" required></td>
             <td><input name="first_name" value="{{ t.first_name }}" required></td>
 
@@ -67,13 +68,18 @@
             </td>
 
             <td>
-              <input type="file" name="signature_file" accept="image/png">
-              <small>PNG uniquement</small>
+              <canvas id="trainerSigCanvas_{{ t.id }}" class="sig-canvas"></canvas>
+              <div class="sig-actions">
+                <button class="btn secondary" id="clearTrainerSig_{{ t.id }}" type="button">Effacer</button>
+              </div>
+              <input type="hidden" name="signature_dataurl" id="signature_dataurl_{{ t.id }}">
+              <small>Signer puis enregistrer.</small>
             </td>
 
             <td>
               {% if t.signature_path %}
-                <a class="btn small" href="{{ url_for('get_attestation', filename=trainers.attestation_pdf_path) }}" target="_blank">Voir</a>
+                <a class="btn small" href="{{ url_for('admin_trainer_signature', trainer_id=t.id) }}" target="_blank">Voir</a>
+                <img class="sig-thumb" src="{{ url_for('admin_trainer_signature', trainer_id=t.id) }}" alt="Signature">
               {% else %}
                 <em>—</em>
               {% endif %}
@@ -91,6 +97,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   {% endif %}
 </div>
 
@@ -179,6 +186,10 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     setup("trainerSigCanvas", "signature_dataurl", "clearTrainerSig");
+
+    {% for t in trainers %}
+      setup("trainerSigCanvas_{{ t.id }}", "signature_dataurl_{{ t.id }}", "clearTrainerSig_{{ t.id }}");
+    {% endfor %}
   });
 })();
 </script>

@@ -628,6 +628,16 @@ def create_app() -> Flask:
             f.write(raw)
 
         return f"{rel_dir}/{fname}".replace("\\", "/")
+    @app.get(admin_base + "/trainers/signature/<int:trainer_id>")
+    @login_required(role="root")
+    def admin_trainer_signature(trainer_id: int):
+        t = Trainer.query.get_or_404(trainer_id)
+        if not t.signature_path:
+            abort(404)
+        abs_path = abs_from_rel(t.signature_path)
+        if not os.path.exists(abs_path):
+            abort(404)
+        return send_file(abs_path, mimetype="image/png")
 
     @app.get(admin_base + "/trainers")
     @login_required(role="root")
