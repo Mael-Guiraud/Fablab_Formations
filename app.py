@@ -489,7 +489,7 @@ def create_app() -> Flask:
 
         disk_name = (
             f"{safe_filename(r.prenom)}_{safe_filename(r.nom)}"
-            f"_{email_part}__{formation_part}_{date_part}.pdf"
+            f"__{email_part}__{formation_part}_{date_part}.pdf"
         )
 
         abs_path2 = os.path.join(target_dir, disk_name)
