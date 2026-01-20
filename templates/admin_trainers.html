@@ -73,7 +73,7 @@
 
             <td>
               {% if t.signature_path %}
-                <a class="btn small" href="{{ url_for('get_attestation', filename=record.attestation_pdf_path) }}" target="_blank">Voir</a>
+                <a class="btn small" href="{{ url_for('get_attestation', filename=trainers.attestation_pdf_path) }}" target="_blank">Voir</a>
               {% else %}
                 <em>—</em>
               {% endif %}
