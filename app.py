@@ -223,13 +223,14 @@ def create_app() -> Flask:
         if os.path.exists(logo_path):
             c.drawImage(
                 logo_path,
-                width - 10 * mm - 45 * mm,
-                height - 10 * mm - 18 * mm,
-                width=45 * mm,
-                height=18 * mm,
+                120* mm - 45 * mm,
+                height - 40 * mm ,
+                width=100 * mm,
+                height=50 * mm,
                 preserveAspectRatio=True,
                 mask="auto",
             )
+
 
         # Titre centré
         c.setFillColor(colors.HexColor("#365F91"))
