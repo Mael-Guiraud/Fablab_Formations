@@ -223,8 +223,8 @@ def create_app() -> Flask:
         if os.path.exists(logo_path):
             c.drawImage(
                 logo_path,
-                width - 10 * mm - 100 * mm,
-                height - 10 * mm - 40 * mm,
+                width - 10 * mm - 50 * mm,
+                height - 10 * mm - 20 * mm,
                 width=100 * mm,
                 height=40 * mm,
                 preserveAspectRatio=True,
