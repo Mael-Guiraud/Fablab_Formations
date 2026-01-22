@@ -220,6 +220,7 @@ def create_app() -> Flask:
 
         # Logo (dimensions/position exactes comme ton exemple)
         logo_path = os.path.join(app.root_path, "static", "cesi_logo.png")
+        print("Drawing logo from", logo_path)
         if os.path.exists(logo_path):
             print("Drawing logo from", logo_path)
             c.drawImage(
