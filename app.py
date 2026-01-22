@@ -799,6 +799,8 @@ def create_app() -> Flask:
         code = (request.form.get("access_code") or "").strip()
         is_active = (request.form.get("is_active") or "off") == "on"
         sig_dataurl = (request.form.get("signature_dataurl") or "").strip()
+        print("FORM KEYS:", list(request.form.keys()))
+        print("ACCESS_CODE RECEIVED:", repr(code))
 
         if not ln or not fn:
             flash("Nom et prénom obligatoires.", "error")
