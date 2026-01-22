@@ -57,92 +57,97 @@
     </thead>
 
     <tbody>
-      {% for t in trainers %}
-      <form method="post" action="{{ url_for('admin_trainers_update', trainer_id=t.id) }}">
-        <!-- Ligne 1 : infos principales -->
-        <tr class="row-main">
-          <td>
-            <input name="last_name" value="{{ t.last_name }}" required style="width:100%;">
-          </td>
+   {% for t in trainers %}
 
-          <td>
-            <input name="first_name" value="{{ t.first_name }}" required style="width:100%;">
-          </td>
+  {# Form UPDATE (déclaré hors des TR) #}
+  <form id="upd_{{ t.id }}"
+        method="post"
+        action="{{ url_for('admin_trainers_update', trainer_id=t.id) }}">
+  </form>
 
-          <td style="text-align:center;">
-            <label class="switch">
-              <input type="checkbox" name="is_active" {% if t.is_active %}checked{% endif %}>
-              <span class="switch-label">{{ "Oui" if t.is_active else "Non" }}</span>
-            </label>
-          </td>
+  {# Form DELETE (séparé, pas imbriqué) #}
+  <form id="del_{{ t.id }}"
+        method="post"
+        action="{{ url_for('admin_trainers_delete', trainer_id=t.id) }}"
+        onsubmit="return confirm('Supprimer ce formateur ?');">
+  </form>
 
-          <td class="actions-col">
-            <button type="submit">Mettre à jour</button>
+  <!-- Ligne 1 : infos principales -->
+  <tr class="row-main">
+    <td>
+      <input form="upd_{{ t.id }}" name="last_name" value="{{ t.last_name }}" required style="width:100%;">
+    </td>
 
-            <form method="post"
-                  action="{{ url_for('admin_trainers_delete', trainer_id=t.id) }}"
-                  onsubmit="return confirm('Supprimer ce formateur ?');"
-                  style="display:inline;">
-              <button type="submit" class="danger">Supprimer</button>
-            </form>
-          </td>
-        </tr>
+    <td>
+      <input form="upd_{{ t.id }}" name="first_name" value="{{ t.first_name }}" required style="width:100%;">
+    </td>
 
-        <!-- Ligne 2 : code + signature (ce que tu veux vraiment) -->
-        <tr class="row-tools">
-          <td colspan="4">
-            <div class="tools-grid">
+    <td style="text-align:center;">
+      <label class="switch">
+        <input form="upd_{{ t.id }}" type="checkbox" name="is_active" {% if t.is_active %}checked{% endif %}>
+        <span class="switch-label">{{ "Oui" if t.is_active else "Non" }}</span>
+      </label>
+    </td>
 
-              <div class="tool-block">
-                <div class="text-title">Nouveau code (laisser vide = inchangé)</div>
-                <input type="password"
-                       name="access_code"
-                       minlength="4"
-                       autocomplete="new-password"
-                       placeholder="Nouveau code">
-                <small>Min 4 caractères.</small>
-              </div>
+    <td class="actions-col">
+      <button type="submit" form="upd_{{ t.id }}">Mettre à jour</button>
+      <button type="submit" form="del_{{ t.id }}" class="danger">Supprimer</button>
+    </td>
+  </tr>
 
-              <div class="tool-block">
-  <div class="text-title">Signature actuelle</div>
+  <!-- Ligne 2 : code + signature -->
+  <tr class="row-tools">
+    <td colspan="4">
+      <div class="tools-grid">
 
-  {% if t.signature_path %}
-    <img class="sig-thumb"
-         src="{{ url_for('admin_trainer_signature', trainer_id=t.id) }}"
-         alt="Signature actuelle">
-  {% else %}
-    <em>Aucune signature enregistrée</em>
-  {% endif %}
+        <div class="tool-block">
+          <div class="text-title">Nouveau code (laisser vide = inchangé)</div>
+          <input form="upd_{{ t.id }}"
+                 type="password"
+                 name="access_code"
+                 minlength="4"
+                 autocomplete="new-password"
+                 placeholder="Nouveau code">
+          <small>Min 4 caractères.</small>
+        </div>
 
-  <div class="text-title" style="margin-top:10px;">
-    Nouvelle signature (laisser vide = inchangé)
-  </div>
+        <div class="tool-block">
+          <div class="text-title">Signature actuelle</div>
 
-  <canvas id="sig_{{ t.id }}" class="sig-canvas small"></canvas>
+          {% if t.signature_path %}
+            <img class="sig-thumb"
+                 src="{{ url_for('admin_trainer_signature', trainer_id=t.id) }}"
+                 alt="Signature actuelle">
+          {% else %}
+            <em>Aucune signature enregistrée</em>
+          {% endif %}
 
-  <div class="sig-actions">
-    <button type="button"
-            class="btn secondary"
-            id="clear_{{ t.id }}">
-      Effacer
-    </button>
-  </div>
+          <div class="text-title" style="margin-top:10px;">
+            Nouvelle signature (laisser vide = inchangé)
+          </div>
 
-  <label style="display:block; margin-top:8px;">Ou importer une image (PNG/JPG)
-    <input type="file" id="file_{{ t.id }}" accept="image/*">
-  </label>
+          <canvas id="sig_{{ t.id }}" class="sig-canvas small"></canvas>
 
-  <input type="hidden"
-         name="signature_dataurl"
-         id="sigdata_{{ t.id }}">
-</div>
+          <div class="sig-actions">
+            <button type="button" class="btn secondary" id="clear_{{ t.id }}">Effacer</button>
+          </div>
 
+          <label style="display:block; margin-top:8px;">Ou importer une image (PNG/JPG)
+            <input type="file" id="file_{{ t.id }}" accept="image/*">
+          </label>
 
-            </div>
-          </td>
-        </tr>
-      </form>
-      {% endfor %}
+          <input form="upd_{{ t.id }}"
+                 type="hidden"
+                 name="signature_dataurl"
+                 id="sigdata_{{ t.id }}">
+        </div>
+
+      </div>
+    </td>
+  </tr>
+
+{% endfor %}
+
     </tbody>
   </table>
 </div>
