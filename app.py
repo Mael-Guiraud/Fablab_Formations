@@ -223,10 +223,10 @@ def create_app() -> Flask:
         if os.path.exists(logo_path):
             c.drawImage(
                 logo_path,
-                120 * mm,
-                height - 40 * mm,
-                width=100 * mm,
-                height=50 * mm,
+                width - 10 * mm - 45 * mm,
+                height - 10 * mm - 18 * mm,
+                width=45 * mm,
+                height=18 * mm,
                 preserveAspectRatio=True,
                 mask="auto",
             )
@@ -363,13 +363,28 @@ def create_app() -> Flask:
             for fo in formations_db
         ]
 
+        default_formation_id = request.args.get("formation_id") or session.get("last_formation_id") or ""
+        if isinstance(default_formation_id, int):
+            default_formation_id = str(default_formation_id)
+
         today_str = date.today().isoformat()
-        default_formation_id = request.args.get("formation_id") or ""
-        return render_template("form.html", trainers=trainers, formations=formations, today_str=today_str, default_formation_id=default_formation_id)    @app.post("/submit")
+        return render_template(
+            "form.html",
+            trainers=trainers,
+            formations=formations,
+            today_str=today_str,
+            default_formation_id=default_formation_id,
+        )
+
+    @app.post("/submit")
     def submit():
         nom = (request.form.get("nom") or "").strip()
         prenom = (request.form.get("prenom") or "").strip()
         email_ = (request.form.get("email") or "").strip()
+
+        # Compat: le template historique envoyait trainer_id.
+        trainer_id = (request.form.get("trainer_id") or "").strip()
+
         formation_id = (request.form.get("formation_id") or "").strip()
         date_str = (request.form.get("date_formation") or "").strip()
 
@@ -378,17 +393,14 @@ def create_app() -> Flask:
 
         errors: list[str] = []
 
-        # Formation
         if not formation_id.isdigit():
             errors.append("Formation invalide.")
 
-        # Identité habilitée
         if not nom:
             errors.append("Nom obligatoire.")
         if not prenom:
             errors.append("Prénom obligatoire.")
 
-        # Email
         if not email_:
             errors.append("Email obligatoire.")
         else:
@@ -396,7 +408,6 @@ def create_app() -> Flask:
             if not (eml.endswith("@cesi.fr") or eml.endswith("@viacesi.fr")):
                 errors.append("Email obligatoire en @cesi.fr ou @viacesi.fr.")
 
-        # Signatures / code
         if len(sig_forme) < 50:
             errors.append("Signature de la personne habilitée obligatoire.")
         if not access_code:
@@ -406,22 +417,27 @@ def create_app() -> Flask:
         if not formation or not formation.is_active:
             errors.append("Formation invalide.")
 
-        # Formateur identifié uniquement par le code (pas de sélection)
-        trainer = None
+        # Détermination du formateur uniquement via le code (sans selection).
+        trainer: Trainer | None = None
         if access_code:
-            active_trainers = Trainer.query.filter_by(is_active=True).all()
-            matches = []
-            for t in active_trainers:
-                if t.access_code_hash and t.check_access_code(access_code):
+            matches: list[Trainer] = []
+            for t in Trainer.query.all():
+                if t.check_access_code(access_code):
                     matches.append(t)
 
-            if len(matches) == 1:
-                trainer = matches[0]
-            elif len(matches) > 1:
-                # Théoriquement impossible si les codes sont uniques
-                errors.append("Code intervenant ambigu (plusieurs formateurs). Contacter un administrateur.")
+            active_matches = [t for t in matches if t.is_active]
+            if len(active_matches) == 1:
+                trainer = active_matches[0]
+            elif len(active_matches) > 1:
+                errors.append("Code intervenant ambigu (plusieurs formateurs). Contactez un administrateur.")
             else:
-                errors.append("Code intervenant incorrect.")
+                # Compat: si un trainer_id est fourni (ancien formulaire), on tente l'ancien schéma.
+                if trainer_id.isdigit():
+                    t = Trainer.query.get(int(trainer_id))
+                    if t and t.is_active and t.check_access_code(access_code):
+                        trainer = t
+                if trainer is None:
+                    errors.append("Code intervenant incorrect.")
 
         if trainer:
             if not trainer.signature_path:
@@ -432,13 +448,13 @@ def create_app() -> Flask:
         if errors:
             for e in errors:
                 flash(e, "error")
-            return redirect(url_for("form", formation_id=formation_id if formation_id.isdigit() else None))
+            return redirect(url_for("form"))
 
         try:
             sig_forme_img = image_reader_from_dataurl(sig_forme)
         except Exception as ex:
             flash(f"Erreur signature: {ex}", "error")
-            return redirect(url_for("form", formation_id=formation_id if formation_id.isdigit() else None))
+            return redirect(url_for("form"))
 
         d = parse_date_or_today(date_str)
 
@@ -446,8 +462,8 @@ def create_app() -> Flask:
             nom=nom,
             prenom=prenom,
             email=email_,
-            trainer_id=trainer.id,
-            formation_id=formation.id,
+            trainer_id=trainer.id,  # type: ignore[union-attr]
+            formation_id=formation.id,  # type: ignore[union-attr]
             date_formation=d,
         )
 
@@ -464,8 +480,10 @@ def create_app() -> Flask:
 
         # En DB : sans email
         record.attestation_pdf_path = pdf_name_db
-
         db.session.commit()
+
+        # Permet de pré-sélectionner la dernière formation sur "Nouvel enregistrement"
+        session["last_formation_id"] = record.formation_id
 
         return render_template("success.html", record=record)
 
@@ -676,42 +694,37 @@ def create_app() -> Flask:
 
     # -------------------------
     # ROOT - Trainers (signature + code)
-# -------------------------
-def is_access_code_unique(code: str, exclude_trainer_id: int | None = None) -> bool:
-    """
-    Vérifie l'unicité d'un code intervenant sans modifier la structure DB.
-    Comme access_code_hash est salé, on teste via check_access_code sur les autres formateurs.
-    """
-    code = (code or "").strip()
-    if not code:
+    # -------------------------
+    def is_access_code_unique(code: str, exclude_trainer_id: int | None = None) -> bool:
+        """
+        Vérifie l'unicité FONCTIONNELLE du code intervenant sans contrainte SQL,
+        car access_code_hash est salé (impossible à comparer directement).
+        """
+        if not code:
+            return True
+        for t in Trainer.query.all():
+            if exclude_trainer_id is not None and t.id == exclude_trainer_id:
+                continue
+            if t.check_access_code(code):
+                return False
         return True
 
-    q = Trainer.query
-    if exclude_trainer_id is not None:
-        q = q.filter(Trainer.id != exclude_trainer_id)
 
-    for t in q.all():
-        if t.access_code_hash and t.check_access_code(code):
-            return False
-    return True
+    def save_trainer_signature_dataurl(data_url: str, trainer_name: str) -> str:
+        if not data_url or not data_url.startswith("data:image/png;base64,"):
+            raise ValueError("Signature formateur invalide.")
+        raw = base64.b64decode(data_url.split(",", 1)[1])
 
+        rel_dir = os.path.join("uploads", "signatures", "trainers")
+        abs_dir = os.path.join(app.root_path, rel_dir)
+        os.makedirs(abs_dir, exist_ok=True)
 
-def save_trainer_signature_dataurl(data_url: str, trainer_name: str) -> str:
-    if not data_url or not data_url.startswith("data:image/png;base64,"):
-        raise ValueError("Signature formateur invalide.")
-    raw = base64.b64decode(data_url.split(",", 1)[1])
+        fname = f"trainer_{safe_filename(trainer_name)}_{int(utcnow().timestamp())}.png"
+        abs_path = os.path.join(abs_dir, fname)
+        with open(abs_path, "wb") as f:
+            f.write(raw)
 
-    rel_dir = os.path.join("uploads", "signatures", "trainers")
-    abs_dir = os.path.join(app.root_path, rel_dir)
-    os.makedirs(abs_dir, exist_ok=True)
-
-    fname = f"trainer_{safe_filename(trainer_name)}_{int(utcnow().timestamp())}.png"
-    abs_path = os.path.join(abs_dir, fname)
-    with open(abs_path, "wb") as f:
-        f.write(raw)
-
-    return f"{rel_dir}/{fname}".replace("\\", "/")
-
+        return f"{rel_dir}/{fname}".replace("\\", "/")
     @app.get(admin_base + "/trainers/signature/<int:trainer_id>")
     @login_required(role="root")
     def admin_trainer_signature(trainer_id: int):
@@ -748,12 +761,12 @@ def save_trainer_signature_dataurl(data_url: str, trainer_name: str) -> str:
         if not code or len(code) < 4:
             flash("Code intervenant obligatoire (min 4 caractères).", "error")
             return redirect(url_for("admin_trainers"))
-
-        if not is_access_code_unique(code):
-            flash("Code intervenant déjà utilisé par un autre formateur. Choisir un code unique.", "error")
-            return redirect(url_for("admin_trainers"))
         if not sig or len(sig) < 50:
             flash("Signature intervenant obligatoire.", "error")
+            return redirect(url_for("admin_trainers"))
+
+        if not is_access_code_unique(code):
+            flash("Ce code intervenant est déjà utilisé. Choisissez un code unique.", "error")
             return redirect(url_for("admin_trainers"))
 
         existing = Trainer.query.filter_by(last_name=ln, first_name=fn).first()
@@ -802,7 +815,7 @@ def save_trainer_signature_dataurl(data_url: str, trainer_name: str) -> str:
                 flash("Code intervenant min 4 caractères.", "error")
                 return redirect(url_for("admin_trainers"))
             if not is_access_code_unique(code, exclude_trainer_id=t.id):
-                flash("Code intervenant déjà utilisé par un autre formateur. Choisir un code unique.", "error")
+                flash("Ce code intervenant est déjà utilisé. Choisissez un code unique.", "error")
                 return redirect(url_for("admin_trainers"))
             t.set_access_code(code)
 
