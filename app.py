@@ -236,13 +236,13 @@ def create_app() -> Flask:
         c.setFillColor(colors.HexColor("#365F91"))
         c.setFont("Helvetica", 24)
         y = height - 30 * mm
-        c.drawCentredString(A4[0] / 2, y, "Habilitation :")
-        y -= 10 * mm
+        c.drawCentredString(A4[0] / 2, y, "Habilitation")
+        y -= 15 * mm
         c.drawCentredString(A4[0] / 2, y, record.formation.name)
 
         c.setFillColor(colors.black)
 
-        y -= 30 * mm
+        y -= 25 * mm
         y = draw_section(c, y, "Formation :", record.formation.formation_text)
         y = draw_section(c, y, "Engagement :", record.formation.engagement_text)
 
