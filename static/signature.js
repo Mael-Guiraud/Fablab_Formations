@@ -88,5 +88,34 @@
 
   document.addEventListener("DOMContentLoaded", function(){
     setupSignature("sigFormeCanvas", "signature_forme", "clearSigForme");
+const fileInput = document.getElementById("sigFormeFile");
+const canvas = document.getElementById("sigFormeCanvas");
+const hidden = document.getElementById("signature_forme");
+if(fileInput && canvas && hidden){
+  fileInput.addEventListener("change", function(){
+    const f = fileInput.files && fileInput.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = function(e){
+      const img = new Image();
+      img.onload = function(){
+        const ctx = canvas.getContext("2d");
+        const rect = canvas.getBoundingClientRect();
+        // Clear + draw centered, preserving aspect ratio
+        ctx.clearRect(0,0,rect.width,rect.height);
+        const scale = Math.min(rect.width / img.width, rect.height / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const x = (rect.width - w) / 2;
+        const y = (rect.height - h) / 2;
+        ctx.drawImage(img, x, y, w, h);
+        hidden.value = canvas.toDataURL("image/png");
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
   });
 })();

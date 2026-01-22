@@ -18,15 +18,7 @@
   <label>Formation suivie* 
     <select name="formation_id" id="formationSelect" required>
       {% for fo in formations %}
-      <option value="{{ fo.id }}">{{ fo.name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-
-  <label>Intervenant* 
-    <select name="trainer_id" required>
-      {% for t in trainers %}
-      <option value="{{ t.id }}">{{ t.first_name }} {{ t.last_name }}</option>
+      <option value="{{ fo.id }}" {% if default_formation_id and fo.id == (default_formation_id|int) %}selected{% endif %}>{{ fo.name }}</option>
       {% endfor %}
     </select>
   </label>
@@ -67,6 +59,12 @@
       <button class="btn secondary" id="clearSigForme" type="button">Effacer</button>
     </div>
     <input type="hidden" name="signature_forme" id="signature_forme">
+    <div style="margin-top:10px;">
+      <label style="display:block;">Ou importer une image de signature (PNG/JPG)
+        <input type="file" id="sigFormeFile" accept="image/*">
+      </label>
+      <small>Optionnel. Si tu importes une image, elle remplacera le dessin du cadre ci-dessus.</small>
+    </div>
   </div>
 </div>
 

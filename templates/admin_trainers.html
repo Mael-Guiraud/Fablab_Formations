@@ -32,6 +32,9 @@
       <div class="sig-actions">
         <button class="btn secondary" id="clearCreateSig" type="button">Effacer</button>
       </div>
+      <label style="display:block; margin-top:8px;">Ou importer une image (PNG/JPG)
+        <input type="file" id="createSigFile" accept="image/*">
+      </label>
       <input type="hidden" name="signature_dataurl" id="create_signature_dataurl">
       <small>Signer à la souris/stylet puis cliquer sur “Créer”.</small>
     </div>
@@ -125,6 +128,10 @@
     </button>
   </div>
 
+  <label style="display:block; margin-top:8px;">Ou importer une image (PNG/JPG)
+    <input type="file" id="file_{{ t.id }}" accept="image/*">
+  </label>
+
   <input type="hidden"
          name="signature_dataurl"
          id="sigdata_{{ t.id }}">
@@ -175,7 +182,7 @@
 
 <script>
 (function(){
-  function setupPad(canvasId, hiddenId, clearBtnId){
+  function setupPad(canvasId, hiddenId, clearBtnId, fileInputId){
     const canvas = document.getElementById(canvasId);
     const hidden = document.getElementById(hiddenId);
     const clearBtn = document.getElementById(clearBtnId);
@@ -240,6 +247,31 @@
       hidden.value = "";
     });
 
+const fileInput = fileInputId ? document.getElementById(fileInputId) : null;
+if(fileInput){
+  fileInput.addEventListener("change", ()=>{
+    const f = fileInput.files && fileInput.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const r = canvas.getBoundingClientRect();
+        ctx.clearRect(0,0,r.width,r.height);
+        const scale = Math.min(r.width / img.width, r.height / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const x = (r.width - w) / 2;
+        const y = (r.height - h) / 2;
+        ctx.drawImage(img, x, y, w, h);
+        hidden.value = canvas.toDataURL("image/png");
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
     const form = canvas.closest("form");
     if(form){
       form.addEventListener("submit", ()=>{
@@ -252,9 +284,9 @@
   }
 
   document.addEventListener("DOMContentLoaded", ()=>{
-    setupPad("createSigCanvas", "create_signature_dataurl", "clearCreateSig");
+    setupPad("createSigCanvas", "create_signature_dataurl", "clearCreateSig", "createSigFile");
     {% for t in trainers %}
-      setupPad("sig_{{ t.id }}", "sigdata_{{ t.id }}", "clear_{{ t.id }}");
+      setupPad("sig_{{ t.id }}", "sigdata_{{ t.id }}", "clear_{{ t.id }}", "file_{{ t.id }}");
     {% endfor %}
   });
 })();
